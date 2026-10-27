@@ -41,9 +41,15 @@ Cuando ocurre un terremoto en una edificación de varios pisos, el colapso de pl
 
 ---
 
-## 3. Controles Rápidos
+## 3. Controles Rápidos (Escritorio, Controles Táctiles y Realidad Virtual WebXR)
 
 - **`▶ INICIAR EXPERIENCIA COMO OPERARIO`**: Botón principal de arranque inmediato (o inicio directo con Sismo Pequeño, Terremoto Fuerte o Colapso Grave `7.8 Mw`).
+- **`📱 Táctil` (Controles Táctiles en Pantalla)**: Activa los **joysticks virtuales analógicos duales** (mover/volar + mirar 360°), botones táctiles de acción (`Saltar`, `Agachar`, `Empujar`, `Poste`, `Extraer`, `Libre/Físico`) y barra superior de salto rápido a **Pisos 1–4, Azotea, Sniffer y Gateway**.
+- **`🥽 Entrar VR` (Realidad Virtual WebXR sin depender del espacio físico *Guardian*)**:
+  - **Stick Izquierdo**: Caminar con colisiones reales y subir escaleras (o volar libremente en *Modo Vuelo VR*) sin mover tus pies del límite físico de las gafas.
+  - **Stick Derecho**: Giro cómodo por pasos (*Snap Turn* `45°`) y elevación vertical en modo vuelo.
+  - **Gatillo (`Trigger`) apuntando al suelo / losas**: Teletransporte instantáneo a cualquier punto o piso.
+  - **Panel Táctico 3D dentro de VR (`Grip` o botón de muñeca `📋 MENÚ VR`)**: Botones flotantes interactivos con puntero láser para ir directo a **Piso 1, Piso 2, Piso 3, Piso 4, Azotea, Sniffer RPi 5, Poste & Gateway y Vista Exterior**, accionar la polea del poste, abrir la **Consola Holográfica VR de datos `t₀`** y disparar los sismos sin quitarte el visor.
 - **Tecla `P` (`🚶 Operario Físico`)**: Caminar con físicas y colisiones reales (`WASD` moverse · `Shift` correr · `Espacio` saltar · `C` agacharse · `F` empujar objetos · `L` linterna táctica).
 - **Tecla `V` (`🛸 Vista Libre 360°`)**: Vuelo libre 3D por todo el escenario (`WASD` volar · `Espacio` subir · `C`/`Q` bajar · `Shift` turbo).
 - **Tecla `B` o clic en el Poste de Luz**: Bajar / subir mecánicamente el **LPSBOX Gateway** del poste exterior (`4.65 m ↔ 1.18 m`).

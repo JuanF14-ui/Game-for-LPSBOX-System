@@ -42,8 +42,11 @@
     </nav>
 
     <div class="topbar-actions">
-      <button class="icon-btn" id="btn-xr" title="Iniciar sesión WebXR (Meta Quest / Visor VR-MR)">
-        🥽 Entrar VR / MR
+      <button class="icon-btn" id="btn-touch-controls" title="Mostrar u ocultar controles táctiles en pantalla (Joysticks + Botones)">
+        📱 Táctil
+      </button>
+      <button class="icon-btn" id="btn-xr" title="Iniciar sesión WebXR con locomoción y panel 3D (Meta Quest / Visor VR-MR)">
+        🥽 Entrar VR
       </button>
       <button class="icon-btn" id="btn-npc-voices" title="Activar o silenciar las voces habladas de las personas (NPCs)">
         🗣️ Voces NPC
@@ -254,14 +257,17 @@
               </div>
             </div>
 
-            <div style="margin-top: 8px;">
+            <div style="margin-top: 8px; display: flex; flex-direction: column; gap: 6px;">
+              <button class="btn" id="btn-hud-touch" type="button" style="width: 100%; font-size: 11.5px;">
+                📱 Activar Controles Táctiles en Pantalla [Joysticks]
+              </button>
               <label class="switch-label" style="font-size: 11.5px;">
                 <input type="checkbox" id="chk-mr-vision" checked />
                 <span>Visión MR (Ondas RF &amp; Enlace RPi5 → Poste)</span>
               </label>
             </div>
             <div class="controls-hint" id="camera-controls-hint">
-              Operario <kbd>P</kbd>: <kbd>WASD</kbd> caminar (colisiones reales) · <kbd>Espacio</kbd> saltar · <kbd>C</kbd> agachar · <kbd>F</kbd> empujar · Vista Libre <kbd>V</kbd>: vuelo 3D · <kbd>B</kbd> poste · <kbd>E</kbd> extraer
+              Operario <kbd>P</kbd>: <kbd>WASD</kbd> caminar · <kbd>Espacio</kbd> saltar · <kbd>F</kbd> empujar · Vista Libre <kbd>V</kbd> · <strong>En VR (<kbd>🥽 Entrar VR</kbd>):</strong> Stick Izq mover, Stick Der girar 45°, Gatillo al suelo = teletransporte + <strong>Panel 3D VR</strong> para ir a Pisos 1–4, Sniffer y Gateway sin mover tus pies.
             </div>
           </div>
         </div>
@@ -363,6 +369,50 @@
         <span id="ticker-clock">t = 0.0s</span>
       </div>
       <div class="ticker-log" id="ticker-log"></div>
+    </div>
+
+    <!-- ================= ON-SCREEN MULTI-TOUCH CONTROLS OVERLAY ================= -->
+    <div class="touch-controls-overlay" id="touch-controls-overlay" aria-label="Controles táctiles en pantalla">
+      <!-- Top Quick Floor / Sniffer / Gateway Jump Bar -->
+      <div class="touch-quick-bar">
+        <button class="touch-quick-pill" type="button" data-touch-preset="view_exterior">🏢 Exterior</button>
+        <button class="touch-quick-pill" type="button" data-touch-preset="floor_0">P1</button>
+        <button class="touch-quick-pill" type="button" data-touch-preset="floor_1">P2</button>
+        <button class="touch-quick-pill" type="button" data-touch-preset="floor_2">P3</button>
+        <button class="touch-quick-pill" type="button" data-touch-preset="floor_3">P4</button>
+        <button class="touch-quick-pill" type="button" data-touch-preset="floor_4">☀️ Azotea</button>
+        <button class="touch-quick-pill" type="button" data-touch-preset="view_sniffer">📡 Sniffer</button>
+        <button class="touch-quick-pill" type="button" data-touch-preset="view_gateway">🏮 Gateway</button>
+        <button class="touch-quick-pill" type="button" id="btn-touch-close" title="Ocultar controles táctiles">✕</button>
+      </div>
+
+      <!-- Bottom-Left Movement Thumbstick + Sprint Toggle -->
+      <div class="touch-bottom-cluster-left">
+        <button class="touch-act-btn" type="button" id="btn-touch-sprint" style="min-height: 34px; padding: 4px 10px;">
+          🏃 Correr: OFF
+        </button>
+        <div class="touch-joystick-zone" id="touch-joy-move">
+          <div class="touch-joystick-knob" id="touch-knob-move"></div>
+          <span class="touch-joystick-label">MOVER / VOLAR</span>
+        </div>
+      </div>
+
+      <!-- Bottom-Right Action Pad + Camera Look Thumbstick -->
+      <div class="touch-bottom-cluster-right">
+        <div class="touch-actions-grid">
+          <button class="touch-act-btn" type="button" id="btn-touch-up">⬆️ Saltar</button>
+          <button class="touch-act-btn" type="button" id="btn-touch-down">⬇️ Agachar</button>
+          <button class="touch-act-btn" type="button" id="btn-touch-shove">✋ Empujar</button>
+          <button class="touch-act-btn" type="button" id="btn-touch-mode">🛸 Libre</button>
+          <button class="touch-act-btn amber" type="button" id="btn-touch-pole">🪜 Poste</button>
+          <button class="touch-act-btn amber" type="button" id="btn-touch-extract">🔌 Extraer</button>
+        </div>
+
+        <div class="touch-joystick-zone look-zone" id="touch-joy-look">
+          <div class="touch-joystick-knob" id="touch-knob-look"></div>
+          <span class="touch-joystick-label">MIRAR 360°</span>
+        </div>
+      </div>
     </div>
 
     <!-- ================= VIEW 2: GATEWAY CONSOLE & OPERATOR REPORT ================= -->
