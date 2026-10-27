@@ -34,6 +34,21 @@ export function loadSharedStlGeometry(onLoaded, onError) {
   );
 }
 
+function drawRoundRectPath(ctx, x, y, w, h, r) {
+  const radius = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + radius, y);
+  ctx.lineTo(x + w - radius, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + radius);
+  ctx.lineTo(x + w, y + h - radius);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - radius, y + h);
+  ctx.lineTo(x + radius, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - radius);
+  ctx.lineTo(x, y + radius);
+  ctx.quadraticCurveTo(x, y, x + radius, y);
+  ctx.closePath();
+}
+
 function makeLabelTexture(title, subtitle, accentColor = '#38bdf8', bgAlpha = 0.82) {
   const canvas = document.createElement('canvas');
   canvas.width = 512;
@@ -41,8 +56,7 @@ function makeLabelTexture(title, subtitle, accentColor = '#38bdf8', bgAlpha = 0.
   const ctx = canvas.getContext('2d');
 
   ctx.fillStyle = `rgba(8, 14, 25, ${bgAlpha})`;
-  ctx.beginPath();
-  ctx.roundRect(6, 6, 500, 148, 20);
+  drawRoundRectPath(ctx, 6, 6, 500, 148, 20);
   ctx.fill();
 
   ctx.lineWidth = 5;
@@ -72,6 +86,7 @@ export class LPSBoxScene3D {
     this.cb = callbacks;
 
     this.mrVisionEnabled = true;
+    this.introOrbitActive = true;
     this.cameraMode = 'tactical'; // 'tactical' | 'firstperson' | 'gateway' | 'sniffer'
 
     // Scene & Renderer
@@ -79,14 +94,18 @@ export class LPSBoxScene3D {
     this.scene.background = new THREE.Color(0x070c16);
     this.scene.fog = new THREE.FogExp2(0x070c16, 0.014);
 
-    const w = container.clientWidth || window.innerWidth;
-    const h = container.clientHeight || window.innerHeight;
+    const w = container.clientWidth || window.innerWidth || 1280;
+    const h = container.clientHeight || window.innerHeight || 720;
 
     this.camera = new THREE.PerspectiveCamera(52, w / h, 0.08, 140);
     this.cameraBasePos = new THREE.Vector3(7.5, 11.5, 17.5);
     this.camera.position.copy(this.cameraBasePos);
 
-    this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+    try {
+      this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+    } catch (_) {
+      this.renderer = new THREE.WebGLRenderer({ antialias: false });
+    }
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     this.renderer.setSize(w, h);
     this.renderer.shadowMap.enabled = true;
@@ -102,6 +121,8 @@ export class LPSBoxScene3D {
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true;
     this.controls.dampingFactor = 0.07;
+    this.controls.autoRotate = true;
+    this.controls.autoRotateSpeed = 0.55;
     this.controls.maxPolarAngle = Math.PI * 0.485;
     this.controls.minDistance = 0.45;
     this.controls.maxDistance = 42;
@@ -869,8 +890,7 @@ export class LPSBoxScene3D {
     if (state === 'evacuated') border = '#10b981';
 
     ctx.fillStyle = 'rgba(7, 12, 22, 0.85)';
-    ctx.beginPath();
-    ctx.roundRect(4, 6, 312, 60, 14);
+    drawRoundRectPath(ctx, 4, 6, 312, 60, 14);
     ctx.fill();
     ctx.lineWidth = 3;
     ctx.strokeStyle = border;
@@ -902,6 +922,7 @@ export class LPSBoxScene3D {
 
     const dom = this.renderer.domElement;
     dom.addEventListener('pointerdown', (e) => {
+      this.stopIntroOrbit();
       this.isPointerDragging = true;
       this.prevPointer.x = e.clientX;
       this.prevPointer.y = e.clientY;
@@ -948,7 +969,17 @@ export class LPSBoxScene3D {
     }
   }
 
+  stopIntroOrbit() {
+    this.introOrbitActive = false;
+    this.controls.autoRotate = false;
+  }
+
+  restoreBackground() {
+    this.scene.background = new THREE.Color(0x070c16);
+  }
+
   setCameraMode(mode) {
+    this.stopIntroOrbit();
     this.cameraMode = mode;
     if (mode === 'firstperson') {
       this.controls.enabled = false;
