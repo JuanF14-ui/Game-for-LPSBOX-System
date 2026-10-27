@@ -30,6 +30,21 @@ const tickerClock = document.getElementById('ticker-clock');
 const btnAudio = document.getElementById('btn-audio');
 const btnNpcVoices = document.getElementById('btn-npc-voices');
 const btnXr = document.getElementById('btn-xr');
+const btnTouchControls = document.getElementById('btn-touch-controls');
+const btnHudTouch = document.getElementById('btn-hud-touch');
+const touchOverlay = document.getElementById('touch-controls-overlay');
+const btnTouchClose = document.getElementById('btn-touch-close');
+const btnTouchSprint = document.getElementById('btn-touch-sprint');
+const btnTouchUp = document.getElementById('btn-touch-up');
+const btnTouchDown = document.getElementById('btn-touch-down');
+const btnTouchShove = document.getElementById('btn-touch-shove');
+const btnTouchMode = document.getElementById('btn-touch-mode');
+const btnTouchPole = document.getElementById('btn-touch-pole');
+const btnTouchExtract = document.getElementById('btn-touch-extract');
+const touchJoyMove = document.getElementById('touch-joy-move');
+const touchKnobMove = document.getElementById('touch-knob-move');
+const touchJoyLook = document.getElementById('touch-joy-look');
+const touchKnobLook = document.getElementById('touch-knob-look');
 
 const btnScNormal = document.getElementById('btn-sc-normal');
 const btnScMild = document.getElementById('btn-sc-mild');
@@ -104,6 +119,8 @@ let experienceStarted = false;
 let xrSession = null;
 let wsClient = null;
 let consoleRefreshTimer = 0;
+let touchControlsEnabled = false;
+let touchSprintActive = false;
 
 // Seismogram display mode: 'live' | 'event' (auto-switches to 'event' when a quake/hit occurs!)
 let seismoViewMode = 'live';
@@ -249,6 +266,27 @@ try {
         btnOpFlashlight.textContent = on ? '🔦 Linterna ON [L]' : '🔦 Linterna [L]';
       }
     },
+    onVrAction: (action) => {
+      sound.ensureContext();
+      if (action === 'sc_normal') {
+        sound.stopAlarmLoop();
+        sim.setNormalMonitoring();
+      } else if (action === 'sc_mild') {
+        setSeismoMode('event');
+        sim.triggerSeismicScenario('mild');
+      } else if (action === 'sc_major') {
+        setSeismoMode('event');
+        sim.triggerSeismicScenario('major');
+      } else if (action === 'sc_catastrophic') {
+        setSeismoMode('event');
+        sim.triggerSeismicScenario('catastrophic');
+      } else if (action === 'toggle_vr_console') {
+        sound.playUsbConnect();
+        refreshConsoleData();
+      } else {
+        sound.playPacketBlip();
+      }
+    },
     onStlReady: () => {
       if (stlText) {
         stlText.textContent = '✓ Malla ./modelo3d.stl cargada (50,000 tris) + Pantalla calibrada al 100%';
@@ -283,6 +321,14 @@ function startExperience(initialScenario = null) {
     syncCameraButtons('tactical');
   }
 
+  // Auto-enable on-screen Touch Controls if user is on a touch device (phone/tablet/headset 2D browser)
+  const isCoarsePointer =
+    (typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches) ||
+    (typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0 && window.innerWidth <= 1024);
+  if (isCoarsePointer && !touchControlsEnabled) {
+    setTouchControlsVisible(true);
+  }
+
   appendLogEntry({
     time: sim.time,
     text: 'Experiencia iniciada: Edificio de 4 pisos en monitoreo. Recuerda bajar el Gateway del poste de luz [B] tras un sismo.',
@@ -314,6 +360,7 @@ function switchView(view) {
   const isSim = view === 'sim';
   if (simHud) simHud.style.display = isSim ? 'flex' : 'none';
   if (bottomTicker) bottomTicker.style.display = isSim ? '' : 'none';
+  if (touchOverlay) touchOverlay.classList.toggle('visible', isSim && touchControlsEnabled);
 
   viewConsole?.classList.toggle('active', view === 'console');
   viewDocs?.classList.toggle('active', view === 'docs');
@@ -406,7 +453,7 @@ function openGatewayExtraction() {
   if (!sim.canExtractGateway()) {
     sound.playLockedBeep();
     elBtnLowerPole?.classList.add('btn-pulse-attention');
-    if (scene3d && activeView === 'sim') {
+    if (scene3d && activeView === 'sim' && !scene3d.renderer.xr.isPresenting) {
       scene3d.setCameraMode('gateway');
       syncCameraButtons('gateway');
     }
@@ -420,7 +467,15 @@ function openGatewayExtraction() {
 
   sound.playUsbConnect();
   sim.dataExtractedByOperator = true;
-  switchView('console');
+  if (scene3d?.renderer.xr.isPresenting) {
+    // Inside VR headset: display the 3D Holographic Gateway Console right in front of the user!
+    scene3d.vrConsoleOpen = true;
+    if (scene3d.vrDataBoard) scene3d.vrDataBoard.visible = true;
+    scene3d._updateVrDataBoardCanvas();
+    refreshConsoleData();
+  } else {
+    switchView('console');
+  }
   appendLogEntry({
     time: sim.time,
     text: 'Cable USB-C conectado al Gateway (1.18 m al pie del poste): registros descargados con éxito.',
@@ -481,7 +536,7 @@ async function toggleWebXR() {
   if (!scene3d) return;
   if (!('xr' in navigator)) {
     alert(
-      'WebXR nativo requiere un navegador compatible (ej. Meta Quest Browser en Quest 2/3/Pro o Chrome Android AR). El modo 3D interactivo de escritorio está completamente activo.'
+      'WebXR nativo requiere un navegador compatible (ej. Meta Quest Browser en Quest 2/3/Pro o Pico Browser). Para pantallas táctiles puedes activar [📱 Táctil].'
     );
     return;
   }
@@ -490,13 +545,21 @@ async function toggleWebXR() {
       await xrSession.end();
       return;
     }
-    const arSupported = await navigator.xr.isSessionSupported('immersive-ar').catch(() => false);
+    // Prefer immersive-vr so full 3D environment + VR thumbstick locomotion + 3D Floor/Sniffer/Gateway menu load cleanly!
     const vrSupported = await navigator.xr.isSessionSupported('immersive-vr').catch(() => false);
-    const mode = arSupported ? 'immersive-ar' : vrSupported ? 'immersive-vr' : null;
+    const arSupported = await navigator.xr.isSessionSupported('immersive-ar').catch(() => false);
+    const mode = vrSupported ? 'immersive-vr' : arSupported ? 'immersive-ar' : null;
     if (!mode) {
-      alert('No se detectó un visor VR/MR conectado en este dispositivo.');
+      alert('No se detectó un visor VR/MR activo en este dispositivo.');
       return;
     }
+
+    if (!experienceStarted) {
+      experienceStarted = true;
+      startOverlay?.classList.add('dismissed');
+    }
+    sound.ensureContext();
+    switchView('sim');
 
     const session = await navigator.xr.requestSession(mode, {
       optionalFeatures: ['local-floor', 'bounded-floor', 'hand-tracking']
@@ -506,11 +569,20 @@ async function toggleWebXR() {
       scene3d.scene.background = null;
     }
     await scene3d.renderer.xr.setSession(session);
-    if (btnXr) btnXr.textContent = '⏹ Salir XR';
+    scene3d.onXrSessionStart();
+
+    if (btnXr) btnXr.textContent = '⏹ Salir VR';
+    appendLogEntry({
+      time: sim.time,
+      text: '🥽 Sesión VR activa: usa el Stick Izq para caminar/volar, Stick Der para girar 45°, Gatillo al suelo para teletransportarte o el Panel 3D VR para ir a Pisos 1–4, Sniffer y Gateway.',
+      level: 'ok'
+    });
+
     session.addEventListener('end', () => {
       xrSession = null;
       scene3d.restoreBackground();
-      if (btnXr) btnXr.textContent = '🥽 Entrar VR / MR';
+      scene3d.onXrSessionEnd();
+      if (btnXr) btnXr.textContent = '🥽 Entrar VR';
     });
   } catch (err) {
     alert(`No fue posible iniciar sesión WebXR: ${err.message}`);
@@ -518,6 +590,206 @@ async function toggleWebXR() {
 }
 
 btnXr?.addEventListener('click', toggleWebXR);
+
+// ================= 5B. CONTROLES TÁCTILES EN PANTALLA (JOYSTICKS DUALES + BOTONES) =================
+function syncTouchModeLabels() {
+  if (!scene3d) return;
+  const isFly = scene3d.cameraMode === 'freefly';
+  if (btnTouchMode) btnTouchMode.textContent = isFly ? '🚶 Físico' : '🛸 Libre';
+  if (btnTouchUp) btnTouchUp.textContent = isFly ? '⬆️ Subir' : '⬆️ Saltar';
+  if (btnTouchDown) btnTouchDown.textContent = isFly ? '⬇️ Bajar' : '⬇️ Agachar';
+}
+
+function setTouchControlsVisible(visible) {
+  touchControlsEnabled = Boolean(visible);
+  if (!experienceStarted && touchControlsEnabled) {
+    experienceStarted = true;
+    startOverlay?.classList.add('dismissed');
+  }
+  if (touchControlsEnabled && activeView !== 'sim') {
+    switchView('sim');
+  }
+  if (touchOverlay) {
+    touchOverlay.classList.toggle('visible', touchControlsEnabled && activeView === 'sim');
+  }
+  btnTouchControls?.classList.toggle('touch-active', touchControlsEnabled);
+  if (btnTouchControls) {
+    btnTouchControls.textContent = touchControlsEnabled ? '📱 Táctil ON' : '📱 Táctil';
+  }
+  if (btnHudTouch) {
+    btnHudTouch.textContent = touchControlsEnabled
+      ? '📱 Ocultar Controles Táctiles en Pantalla'
+      : '📱 Activar Controles Táctiles en Pantalla [Joysticks]';
+  }
+
+  if (touchControlsEnabled && scene3d) {
+    if (scene3d.cameraMode !== 'firstperson' && scene3d.cameraMode !== 'freefly') {
+      scene3d.setCameraMode('firstperson');
+      syncCameraButtons('firstperson');
+    }
+    // Auto-collapse side cards on narrow mobile screens so dual joysticks have full room
+    if (window.innerWidth <= 960) {
+      ['card-mission', 'card-camera'].forEach((cid) => {
+        const c = document.getElementById(cid);
+        c?.classList.add('collapsed');
+      });
+    }
+    syncTouchModeLabels();
+  } else if (scene3d) {
+    scene3d.setTouchInput({ moveX: 0, moveY: 0, lookX: 0, lookY: 0, up: false, down: false, sprint: false });
+  }
+}
+
+btnTouchControls?.addEventListener('click', () => {
+  sound.ensureContext();
+  setTouchControlsVisible(!touchControlsEnabled);
+});
+btnHudTouch?.addEventListener('click', () => {
+  sound.ensureContext();
+  setTouchControlsVisible(!touchControlsEnabled);
+});
+btnTouchClose?.addEventListener('click', () => setTouchControlsVisible(false));
+
+function bindVirtualJoystick(zoneEl, knobEl, onChange) {
+  if (!zoneEl || !knobEl) return;
+  let activePointerId = null;
+  const maxRadius = 40;
+
+  const updateFromEvent = (e) => {
+    const rect = zoneEl.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    let dx = e.clientX - cx;
+    let dy = e.clientY - cy;
+    const dist = Math.hypot(dx, dy);
+    if (dist > maxRadius) {
+      dx = (dx / dist) * maxRadius;
+      dy = (dy / dist) * maxRadius;
+    }
+    knobEl.style.transform = `translate(${dx.toFixed(1)}px, ${dy.toFixed(1)}px)`;
+    onChange(dx / maxRadius, dy / maxRadius);
+  };
+
+  const resetStick = () => {
+    activePointerId = null;
+    knobEl.style.transform = 'translate(0px, 0px)';
+    onChange(0, 0);
+  };
+
+  zoneEl.addEventListener('pointerdown', (e) => {
+    if (activePointerId !== null) return;
+    sound.ensureContext();
+    activePointerId = e.pointerId;
+    if (zoneEl.setPointerCapture) {
+      try { zoneEl.setPointerCapture(e.pointerId); } catch (_) {}
+    }
+    // Ensure camera is in walkable/flyable mode as soon as user grabs joystick!
+    if (scene3d && scene3d.cameraMode !== 'firstperson' && scene3d.cameraMode !== 'freefly') {
+      scene3d.setCameraMode('firstperson');
+      syncCameraButtons('firstperson');
+      syncTouchModeLabels();
+    }
+    updateFromEvent(e);
+  });
+
+  zoneEl.addEventListener('pointermove', (e) => {
+    if (e.pointerId !== activePointerId) return;
+    updateFromEvent(e);
+  });
+
+  zoneEl.addEventListener('pointerup', (e) => {
+    if (e.pointerId !== activePointerId) return;
+    resetStick();
+  });
+
+  zoneEl.addEventListener('pointercancel', (e) => {
+    if (e.pointerId !== activePointerId) return;
+    resetStick();
+  });
+}
+
+bindVirtualJoystick(touchJoyMove, touchKnobMove, (nx, ny) => {
+  scene3d?.setTouchInput({ moveX: nx, moveY: ny });
+});
+
+bindVirtualJoystick(touchJoyLook, touchKnobLook, (nx, ny) => {
+  scene3d?.setTouchInput({ lookX: nx, lookY: ny });
+});
+
+btnTouchSprint?.addEventListener('click', () => {
+  touchSprintActive = !touchSprintActive;
+  scene3d?.setTouchInput({ sprint: touchSprintActive });
+  btnTouchSprint.textContent = touchSprintActive ? '🏃 Correr: ON' : '🏃 Correr: OFF';
+  btnTouchSprint.classList.toggle('held', touchSprintActive);
+});
+
+const bindHoldTouchButton = (btn, onPress, onRelease) => {
+  if (!btn) return;
+  btn.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    sound.ensureContext();
+    btn.classList.add('held');
+    onPress();
+  });
+  const end = () => {
+    btn.classList.remove('held');
+    if (onRelease) onRelease();
+  };
+  btn.addEventListener('pointerup', end);
+  btn.addEventListener('pointercancel', end);
+  btn.addEventListener('pointerleave', end);
+};
+
+bindHoldTouchButton(
+  btnTouchUp,
+  () => scene3d?.setTouchInput({ up: true }),
+  () => scene3d?.setTouchInput({ up: false })
+);
+
+bindHoldTouchButton(
+  btnTouchDown,
+  () => {
+    if (scene3d?.cameraMode === 'firstperson') {
+      scene3d.fpCrouching = !scene3d.fpCrouching;
+    } else {
+      scene3d?.setTouchInput({ down: true });
+    }
+  },
+  () => scene3d?.setTouchInput({ down: false })
+);
+
+btnTouchShove?.addEventListener('click', () => {
+  sound.ensureContext();
+  if (scene3d) {
+    if (scene3d.cameraMode !== 'firstperson') {
+      scene3d.setCameraMode('firstperson');
+      syncCameraButtons('firstperson');
+      syncTouchModeLabels();
+    }
+    scene3d.triggerOperatorShove();
+  }
+});
+
+btnTouchMode?.addEventListener('click', () => {
+  if (!scene3d) return;
+  const next = scene3d.cameraMode === 'freefly' ? 'firstperson' : 'freefly';
+  scene3d.setCameraMode(next);
+  syncCameraButtons(next);
+  syncTouchModeLabels();
+});
+
+btnTouchPole?.addEventListener('click', () => handlePoleToggleAction(false));
+btnTouchExtract?.addEventListener('click', () => openGatewayExtraction());
+
+document.querySelectorAll('[data-touch-preset]').forEach((pill) => {
+  pill.addEventListener('click', () => {
+    sound.ensureContext();
+    const preset = pill.dataset.touchPreset;
+    scene3d?.teleportXrToPreset(preset);
+    syncCameraButtons('firstperson');
+    syncTouchModeLabels();
+  });
+});
 
 // ================= 6. CONTROL DE ESCENARIOS Y PARÁMETROS =================
 function updateScenarioButtonsUI(sc) {
@@ -628,6 +900,7 @@ document.getElementById('btn-new-mission')?.addEventListener('click', () => {
 // ================= 7. CÁMARAS Y VISIÓN MR =================
 function syncCameraButtons(mode) {
   camButtons.forEach((b) => b.classList.toggle('active', b.dataset.cam === mode));
+  syncTouchModeLabels();
 }
 
 camButtons.forEach((btn) => {

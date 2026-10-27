@@ -282,6 +282,34 @@ export class LPSBoxScene3D {
     this.clickableGateway = [];
     this.clickablePole = [];
     this.clickableSniffer = [];
+    this.walkableTeleportMeshes = [];
+
+    // Touch virtual joysticks & buttons state
+    this.touchInput = {
+      moveX: 0,
+      moveY: 0,
+      lookX: 0,
+      lookY: 0,
+      up: false,
+      down: false,
+      sprint: false
+    };
+
+    // WebXR VR Locomotion, Controllers & 3D Interactive Menu state
+    this.xrYaw = 0.16;
+    this.xrVelY = 0;
+    this.xrGrounded = true;
+    this.vrFlightMode = false;
+    this.vrConsoleOpen = false;
+    this.vrMenuVisible = false;
+    this.vrUiButtons = [];
+    this.xrControllers = [];
+    this._xrSnapTurnCooldown = 0;
+    this._xrButtonCooldown = 0;
+    this._xrAimTeleportPoint = null;
+    this._xrTempMatrix = new THREE.Matrix4();
+    this._xrTempVec = new THREE.Vector3();
+    this._xrTempDir = new THREE.Vector3();
 
     this.worldGroup = new THREE.Group();
     this.scene.add(this.worldGroup);
@@ -326,6 +354,7 @@ export class LPSBoxScene3D {
     this._buildStreetLightPoleGateway();
     this._buildDynamicPropsAcrossFloors();
     this._buildParticlePools();
+    this._setupWebXRControllersAndMenu();
     this._bindInputs();
 
     window.addEventListener('resize', () => this.onResize());
@@ -378,8 +407,12 @@ export class LPSBoxScene3D {
     coolRim.position.set(-18, 14, -14);
     this.scene.add(coolRim);
 
-    // Operator Tactical Flashlight (attached to camera, toggled with [L])
-    this.scene.add(this.camera);
+    // WebXR Camera Rig (enables full VR thumbstick movement, snap-turn & floor teleport inside small Guardian spaces!)
+    this.xrRig = new THREE.Group();
+    this.scene.add(this.xrRig);
+    this.xrRig.add(this.camera);
+
+    // Operator Tactical Flashlight (attached to camera, toggled with [L] or VR menu)
     this.operatorFlashlight = new THREE.SpotLight(0xfef9c3, 0.0, 24, Math.PI * 0.24, 0.42, 1.1);
     this.operatorFlashlight.position.set(0.18, -0.12, 0);
     this.operatorFlashlight.target.position.set(0, -0.08, -6);
@@ -396,6 +429,7 @@ export class LPSBoxScene3D {
     ground.rotation.x = -Math.PI / 2;
     ground.receiveShadow = true;
     this.worldGroup.add(ground);
+    this.walkableTeleportMeshes.push(ground);
 
     // Building concrete plaza & front sidewalk (z in [-6..5.8])
     const plaza = new THREE.Mesh(
@@ -405,6 +439,7 @@ export class LPSBoxScene3D {
     plaza.position.set(0, 0.07, -0.3);
     plaza.receiveShadow = true;
     this.worldGroup.add(plaza);
+    this.walkableTeleportMeshes.push(plaza);
 
     // Street asphalt roadway (z in [5.8..12.6])
     const road = new THREE.Mesh(
@@ -414,6 +449,7 @@ export class LPSBoxScene3D {
     road.position.set(0, 0.03, 9.1);
     road.receiveShadow = true;
     this.worldGroup.add(road);
+    this.walkableTeleportMeshes.push(road);
 
     // South park / plaza island where Safe Assembly & Pole sit (z in [7.2..13.5] sidewalks on sides)
     const southPlaza = new THREE.Mesh(
@@ -423,6 +459,7 @@ export class LPSBoxScene3D {
     southPlaza.position.set(0, 0.07, 10.2);
     southPlaza.receiveShadow = true;
     this.worldGroup.add(southPlaza);
+    this.walkableTeleportMeshes.push(southPlaza);
 
     // Pedestrian crosswalk stripes leading from lobby door to Safe Assembly Plaza
     const stripeMat = new THREE.MeshBasicMaterial({ color: 0xe2e8f0, transparent: true, opacity: 0.75 });
@@ -534,6 +571,7 @@ export class LPSBoxScene3D {
       slab.receiveShadow = true;
       slab.castShadow = true;
       fg.add(slab);
+      this.walkableTeleportMeshes.push(slab);
 
       // Colored architectural floor finish + perimeter LED strip
       const finishMat = new THREE.MeshStandardMaterial({
@@ -545,6 +583,7 @@ export class LPSBoxScene3D {
       finish.position.set(-1.5, 0.225, -0.4);
       finish.receiveShadow = true;
       fg.add(finish);
+      this.walkableTeleportMeshes.push(finish);
 
       const trim = new THREE.Mesh(
         new THREE.BoxGeometry(14.62, 0.08, 0.08),
@@ -798,6 +837,7 @@ export class LPSBoxScene3D {
       southLanding.position.set(7.25, yFloor - 0.09, 2.52);
       southLanding.receiveShadow = true;
       this.stairwellGroup.add(southLanding);
+      this.walkableTeleportMeshes.push(southLanding);
 
       if (f < 4) {
         const yMid = f * FLOOR_HEIGHT + 1.82;
@@ -888,6 +928,7 @@ export class LPSBoxScene3D {
     roofSlab.castShadow = true;
     roofSlab.receiveShadow = true;
     this.rooftopGroup.add(roofSlab);
+    this.walkableTeleportMeshes.push(roofSlab);
 
     // Parapet walls
     const paraMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.7 });
@@ -2650,6 +2691,857 @@ export class LPSBoxScene3D {
     this._updatePoleSignTexture();
   }
 
+  // ================= WEBXR VR CONTROLLERS, GUARDIAN-FREE LOCOMOTION & 3D IN-VR MENU =================
+  _drawVrButtonCanvas(canvas, title, subtitle, accentColor, isHovered = false, isActive = false) {
+    const ctx = canvas.getContext('2d');
+    const w = canvas.width;
+    const h = canvas.height;
+    ctx.clearRect(0, 0, w, h);
+
+    ctx.fillStyle = isHovered
+      ? 'rgba(14, 116, 144, 0.96)'
+      : isActive
+        ? 'rgba(30, 58, 138, 0.95)'
+        : 'rgba(15, 23, 42, 0.94)';
+    drawRoundRectPath(ctx, 4, 4, w - 8, h - 8, 16);
+    ctx.fill();
+
+    ctx.lineWidth = isHovered ? 6 : isActive ? 5 : 3;
+    ctx.strokeStyle = isHovered ? '#f8fafc' : accentColor;
+    drawRoundRectPath(ctx, 4, 4, w - 8, h - 8, 16);
+    ctx.stroke();
+
+    ctx.fillStyle = '#f8fafc';
+    ctx.font = 'bold 26px system-ui, -apple-system, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(title, w / 2, subtitle ? 44 : 58);
+
+    if (subtitle) {
+      ctx.fillStyle = isHovered ? '#e0f2fe' : '#cbd5e1';
+      ctx.font = '600 18px monospace';
+      ctx.fillText(subtitle, w / 2, 74);
+    }
+  }
+
+  _setupWebXRControllersAndMenu() {
+    // 1. Floor Teleport Target Ring + Laser Aim Dot
+    this.xrTeleportRing = new THREE.Mesh(
+      new THREE.RingGeometry(0.24, 0.36, 28),
+      new THREE.MeshBasicMaterial({ color: 0x38bdf8, side: THREE.DoubleSide, transparent: true, opacity: 0.88 })
+    );
+    this.xrTeleportRing.rotation.x = -Math.PI / 2;
+    this.xrTeleportRing.visible = false;
+    this.scene.add(this.xrTeleportRing);
+
+    this.xrAimDot = new THREE.Mesh(
+      new THREE.SphereGeometry(0.028, 12, 12),
+      new THREE.MeshBasicMaterial({ color: 0xfbbf24 })
+    );
+    this.xrAimDot.visible = false;
+    this.scene.add(this.xrAimDot);
+
+    // 2. Setup Dual WebXR Controllers inside this.xrRig
+    if (this.renderer.xr && typeof this.renderer.xr.getController === 'function') {
+      for (let i = 0; i < 2; i++) {
+        const ctrl = this.renderer.xr.getController(i);
+        if (!ctrl) continue;
+        ctrl.userData.index = i;
+
+        // Controller handle body
+        const handle = new THREE.Mesh(
+          new THREE.BoxGeometry(0.036, 0.032, 0.13),
+          new THREE.MeshStandardMaterial({ color: 0x1e293b, metalness: 0.5, roughness: 0.35 })
+        );
+        handle.position.set(0, -0.012, 0.045);
+        ctrl.add(handle);
+
+        // Glowing 3D Laser Ray along -Z
+        const rayGeo = new THREE.BufferGeometry().setFromPoints([
+          new THREE.Vector3(0, 0, 0),
+          new THREE.Vector3(0, 0, -1)
+        ]);
+        const rayMat = new THREE.LineBasicMaterial({
+          color: i === 0 ? 0x38bdf8 : 0xfbbf24,
+          transparent: true,
+          opacity: 0.9
+        });
+        const laserLine = new THREE.Line(rayGeo, rayMat);
+        laserLine.scale.z = 12.0;
+        ctrl.add(laserLine);
+        ctrl.userData.laserLine = laserLine;
+        ctrl.userData.rayMat = rayMat;
+
+        // Left-hand Wrist Quick-Summon Badge ("📋 TRAER MENÚ VR")
+        if (i === 0) {
+          const wristCanvas = document.createElement('canvas');
+          wristCanvas.width = 256;
+          wristCanvas.height = 96;
+          this._drawVrButtonCanvas(wristCanvas, '📋 MENÚ VR', 'Clic o Botón Grip', '#38bdf8');
+          const wristTex = new THREE.CanvasTexture(wristCanvas);
+          wristTex.colorSpace = THREE.SRGBColorSpace;
+          const wristBtn = new THREE.Mesh(
+            new THREE.PlaneGeometry(0.16, 0.06),
+            new THREE.MeshBasicMaterial({ map: wristTex, transparent: true, side: THREE.DoubleSide })
+          );
+          wristBtn.position.set(0.075, 0.045, 0.03);
+          wristBtn.rotation.set(-0.55, -0.25, 0);
+          wristBtn.userData.vrAction = 'summon_menu';
+          ctrl.add(wristBtn);
+          this.vrWristBtn = wristBtn;
+        }
+
+        ctrl.addEventListener('selectstart', () => this._onXrControllerSelect(ctrl));
+        ctrl.addEventListener('squeezestart', () => this.summonVrMenuInFront(0));
+
+        this.xrRig.add(ctrl);
+        this.xrControllers.push(ctrl);
+      }
+    }
+
+    // 3. Build Floating 3D Interactive VR Control Tablet (this.vrMenuGroup)
+    this.vrMenuGroup = new THREE.Group();
+    this.vrMenuGroup.visible = false;
+    this.scene.add(this.vrMenuGroup);
+
+    const backing = new THREE.Mesh(
+      new THREE.BoxGeometry(1.26, 0.86, 0.024),
+      new THREE.MeshStandardMaterial({ color: 0x09111f, roughness: 0.4, metalness: 0.35 })
+    );
+    backing.position.set(0, 0, -0.016);
+    this.vrMenuBacking = backing;
+    this.vrMenuGroup.add(backing);
+
+    const borderFrame = new THREE.Mesh(
+      new THREE.BoxGeometry(1.285, 0.885, 0.016),
+      new THREE.MeshBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.42 })
+    );
+    borderFrame.position.set(0, 0, -0.022);
+    this.vrMenuGroup.add(borderFrame);
+
+    // Header Status Canvas on Top of VR Tablet
+    this.vrHeaderCanvas = document.createElement('canvas');
+    this.vrHeaderCanvas.width = 1024;
+    this.vrHeaderCanvas.height = 156;
+    this.vrHeaderTex = new THREE.CanvasTexture(this.vrHeaderCanvas);
+    this.vrHeaderTex.colorSpace = THREE.SRGBColorSpace;
+    const headerMesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(1.20, 0.175),
+      new THREE.MeshBasicMaterial({ map: this.vrHeaderTex, transparent: true })
+    );
+    headerMesh.position.set(0, 0.315, 0.002);
+    this.vrMenuGroup.add(headerMesh);
+
+    const makeVrBtn = (x, y, w, h, action, title, sub, accent) => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 320;
+      canvas.height = 96;
+      this._drawVrButtonCanvas(canvas, title, sub, accent, false, false);
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      const mesh = new THREE.Mesh(
+        new THREE.PlaneGeometry(w, h),
+        new THREE.MeshBasicMaterial({ map: tex, transparent: true, side: THREE.DoubleSide })
+      );
+      mesh.position.set(x, y, 0.004);
+      mesh.userData = { vrAction: action, canvas, tex, title, sub, accent, hovered: false, active: false };
+      this.vrMenuGroup.add(mesh);
+      this.vrUiButtons.push(mesh);
+      return mesh;
+    };
+
+    // ROW 1 (y = +0.145): Ir a Pisos 1–4, Azotea y Vista Exterior
+    const r1Cols = [-0.49, -0.294, -0.098, 0.098, 0.294, 0.49];
+    makeVrBtn(r1Cols[0], 0.145, 0.184, 0.105, 'view_exterior', '🏢 Exterior', 'Plaza General', '#38bdf8');
+    makeVrBtn(r1Cols[1], 0.145, 0.184, 0.105, 'floor_0', '☕ Piso 1', 'Cafetería', '#10b981');
+    makeVrBtn(r1Cols[2], 0.145, 0.184, 0.105, 'floor_1', '🔬 Piso 2', 'Laboratorio', '#38bdf8');
+    makeVrBtn(r1Cols[3], 0.145, 0.184, 0.105, 'floor_2', '🖧 Piso 3', 'Servidores', '#a855f7');
+    makeVrBtn(r1Cols[4], 0.145, 0.184, 0.105, 'floor_3', '🎓 Piso 4', 'Auditorio', '#f59e0b');
+    makeVrBtn(r1Cols[5], 0.145, 0.184, 0.105, 'floor_4', '☀️ Azotea', 'Nivel 13.1m', '#94a3b8');
+
+    // ROW 2 (y = +0.01): Inspección Directa de Sniffer RPi5, Poste & Gateway, Polea y Consola VR
+    makeVrBtn(-0.44, 0.01, 0.285, 0.112, 'view_sniffer', '📡 Sniffer RPi5', 'Ir a Piso 2 (Frente)', '#2dd4bf');
+    makeVrBtn(-0.145, 0.01, 0.285, 0.112, 'view_gateway', '🏮 Poste & Gateway', 'Ir al Poste Exterior', '#fbbf24');
+    makeVrBtn(0.15, 0.01, 0.285, 0.112, 'toggle_pole', '🪜 Polea Poste', 'Bajar / Subir GW', '#f59e0b');
+    makeVrBtn(0.445, 0.01, 0.285, 0.112, 'toggle_vr_console', '📊 Datos Gateway', 'Ver Captura t₀ VR', '#38bdf8');
+
+    // ROW 3 (y = -0.125): Control de Escenarios Sísmicos en VR
+    makeVrBtn(-0.44, -0.125, 0.285, 0.105, 'sc_normal', '🟢 Monitoreo', 'Calma Base', '#10b981');
+    makeVrBtn(-0.145, -0.125, 0.285, 0.105, 'sc_mild', '🟡 Sismo 4.2', 'Leve (14s)', '#fbbf24');
+    makeVrBtn(0.15, -0.125, 0.285, 0.105, 'sc_major', '🔴 Fuerte 6.9', 'Evacuación (22s)', '#ef4444');
+    makeVrBtn(0.445, -0.125, 0.285, 0.105, 'sc_catastrophic', '💥 Colapso 7.8', 'Escombros + RPi5', '#e879f9');
+
+    // ROW 4 (y = -0.265): Modo Locomoción VR (Caminar vs Vuelo Libre), Empujar, Linterna y Ocultar
+    makeVrBtn(-0.44, -0.265, 0.285, 0.102, 'toggle_vr_flight', '🛸 Modo Vuelo VR', 'Alternar Caminar/Volar', '#c084fc');
+    makeVrBtn(-0.145, -0.265, 0.285, 0.102, 'shove_props', '✋ Empujar / Golpe', 'Física de Objetos', '#38bdf8');
+    makeVrBtn(0.15, -0.265, 0.285, 0.102, 'toggle_flashlight', '🔦 Linterna Casco', 'Luz de Rescate', '#fde047');
+    makeVrBtn(0.445, -0.265, 0.285, 0.102, 'recenter_menu', '📌 Centrar Panel', 'O pulsa Grip', '#94a3b8');
+
+    // 4. Floating 3D Holographic Gateway Data & Seismogram Board right beside VR Menu!
+    this.vrDataCanvas = document.createElement('canvas');
+    this.vrDataCanvas.width = 768;
+    this.vrDataCanvas.height = 540;
+    this.vrDataTex = new THREE.CanvasTexture(this.vrDataCanvas);
+    this.vrDataTex.colorSpace = THREE.SRGBColorSpace;
+    this.vrDataBoard = new THREE.Mesh(
+      new THREE.PlaneGeometry(1.06, 0.75),
+      new THREE.MeshBasicMaterial({ map: this.vrDataTex, transparent: true, side: THREE.DoubleSide })
+    );
+    this.vrDataBoard.position.set(1.22, 0.02, 0.16);
+    this.vrDataBoard.rotation.y = -0.26;
+    this.vrDataBoard.visible = false;
+    this.vrMenuGroup.add(this.vrDataBoard);
+
+    this._updateVrMenuStatusHeader();
+    this._updateVrDataBoardCanvas();
+  }
+
+  _updateVrMenuStatusHeader() {
+    if (!this.vrHeaderCanvas) return;
+    const ctx = this.vrHeaderCanvas.getContext('2d');
+    const w = this.vrHeaderCanvas.width;
+    const h = this.vrHeaderCanvas.height;
+
+    ctx.fillStyle = '#0f172a';
+    ctx.fillRect(0, 0, w, h);
+    ctx.strokeStyle = '#38bdf8';
+    ctx.lineWidth = 4;
+    ctx.strokeRect(2, 2, w - 4, h - 4);
+
+    ctx.fillStyle = '#38bdf8';
+    ctx.font = 'bold 28px system-ui, sans-serif';
+    ctx.fillText('🥽 PANEL TÁCTICO VR — LPSBOX (4 PISOS · SNIFFER · GATEWAY)', 22, 40);
+
+    const poleTxt =
+      this.sim.gatewayPoleState === 'down'
+        ? '✅ GATEWAY ABAJO (1.18m · USB-C LISTO)'
+        : `⬆️ GATEWAY EN POSTE (${this.sim.gatewayHeight.toFixed(1)}m)`;
+    const snifferTxt = this.sim.snifferDamaged
+      ? '⚠ SNIFFER SEPULTADO (t₀ EN POSTE)'
+      : `SNIFFER RPi5 ONLINE (STA/LTA ${this.sim.staLtaRatio.toFixed(1)})`;
+
+    ctx.fillStyle = '#fbbf24';
+    ctx.font = 'bold 21px monospace';
+    ctx.fillText(`${poleTxt}   |   ${snifferTxt}`, 22, 82);
+
+    ctx.fillStyle = '#cbd5e1';
+    ctx.font = '19px system-ui, sans-serif';
+    const modeStr = this.vrFlightMode ? '🛸 Vuelo Libre VR activo (Stick Izq volar · Stick Der subir/bajar)' : '🚶 Caminar VR activo (Stick Izq mover · Stick Der girar 45° · Gatillo al suelo = Teletransporte)';
+    ctx.fillText(modeStr, 22, 126);
+
+    this.vrHeaderTex.needsUpdate = true;
+  }
+
+  _updateVrDataBoardCanvas() {
+    if (!this.vrDataCanvas) return;
+    const ctx = this.vrDataCanvas.getContext('2d');
+    const w = this.vrDataCanvas.width;
+    const h = this.vrDataCanvas.height;
+
+    ctx.fillStyle = 'rgba(6, 12, 24, 0.96)';
+    ctx.fillRect(0, 0, w, h);
+    ctx.strokeStyle = this.sim.gatewayLeds.yellow ? '#fbbf24' : '#38bdf8';
+    ctx.lineWidth = 6;
+    ctx.strokeRect(4, 4, w - 8, h - 8);
+
+    ctx.fillStyle = '#f8fafc';
+    ctx.font = 'bold 26px system-ui, sans-serif';
+    ctx.fillText('📊 CONSOLA HOLOGRÁFICA VR — EXTRACCIÓN GATEWAY', 24, 42);
+
+    if (!this.sim.canExtractGateway()) {
+      ctx.fillStyle = '#fbbf24';
+      ctx.font = 'bold 23px system-ui, sans-serif';
+      ctx.fillText('🔒 Gateway arriba en el Poste de Luz (4.65 m)', 24, 92);
+      ctx.fillStyle = '#cbd5e1';
+      ctx.font = '20px system-ui, sans-serif';
+      ctx.fillText('Pulsa [🪜 Polea Poste] en el panel VR o apunta al poste con el gatillo', 24, 128);
+      ctx.fillText('para bajarlo a 1.18 m y extraer la captura pre-sismo (t₀).', 24, 158);
+    } else {
+      const snap = this.sim.frozenSnapshot;
+      const rawList = snap
+        ? snap.rawPackets
+        : this.sim.rollingProbes.filter((p) => this.sim.time - p.timestamp <= 10.0);
+      const uniqueMap = new Map();
+      rawList.forEach((pkt) => {
+        if (!pkt.isDuplicateRandomBurst) uniqueMap.set(pkt.deviceHash, pkt);
+      });
+      const uniqueList = Array.from(uniqueMap.values());
+      const zCounts = { A: 0, B: 0, C: 0, D: 0 };
+      uniqueList.forEach((p) => {
+        if (zCounts[p.estimatedZone] !== undefined) zCounts[p.estimatedZone]++;
+      });
+
+      ctx.fillStyle = snap ? '#fcd34d' : '#38bdf8';
+      ctx.font = 'bold 21px monospace';
+      ctx.fillText(
+        snap
+          ? `🟡 SNAPSHOT PRE-SISMO CONGELADO EN t₀ = ${snap.triggerTime.toFixed(1)}s (${snap.magnitude.toFixed(1)} Mw)`
+          : '🔵 MONITOREO EN VIVO (Ventana 10s recibida desde RPi5)',
+        24,
+        84
+      );
+
+      if (this.sim.snifferDamaged) {
+        ctx.fillStyle = '#fb7185';
+        ctx.font = 'bold 19px monospace';
+        ctx.fillText('⚠ SNIFFER PISO 2 BAJO ESCOMBROS — DATOS t₀ SALVADOS EN ESTE GATEWAY', 24, 114);
+      }
+
+      ctx.fillStyle = '#34d399';
+      ctx.font = 'bold 28px monospace';
+      ctx.fillText(`TOTAL CELULARES ÚNICOS (t₀): ${uniqueList.length} personas`, 24, 156);
+
+      const floorRows = [
+        ['Piso 1 — Cafetería & Lobby:', zCounts.A, '#10b981'],
+        ['Piso 2 — Laboratorio & RPi5:', zCounts.B, '#38bdf8'],
+        ['Piso 3 — Sala de Servidores:', zCounts.C, '#a855f7'],
+        ['Piso 4 — Auditorio Proyectos:', zCounts.D, '#f59e0b']
+      ];
+      floorRows.forEach(([label, count, col], idx) => {
+        const ry = 200 + idx * 36;
+        ctx.fillStyle = col;
+        ctx.font = 'bold 22px monospace';
+        ctx.fillText(`${label}  ${count} celulares`, 32, ry);
+      });
+
+      const trappedNow = this.sim.people.filter((p) => p.state === 'trapped').length;
+      ctx.fillStyle = trappedNow > 0 ? '#fda4af' : '#94a3b8';
+      ctx.font = 'bold 19px monospace';
+      ctx.fillText(
+        `MACs Aleatorias Filtradas: ${rawList.filter((p) => p.isDuplicateRandomBurst).length}  |  Atrapados Post-Sismo: ${trappedNow}`,
+        24,
+        355
+      );
+    }
+
+    // Draw Mini Seismogram at the bottom of VR Holographic Console (y: 375..518)
+    const sx = 24;
+    const sy = 378;
+    const sw = w - 48;
+    const sh = 138;
+    ctx.fillStyle = '#030712';
+    ctx.fillRect(sx, sy, sw, sh);
+    ctx.strokeStyle = '#1e293b';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(sx, sy, sw, sh);
+
+    const ev = this.sim.getEventSeismogram();
+    const series = ev && ev.samples.length >= 2 ? ev.samples : this.sim.seismoHistory;
+    if (series.length >= 2) {
+      const maxG = Math.max(0.18, ev ? ev.peakG * 1.15 : 0.75);
+      ctx.strokeStyle = '#38bdf8';
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      series.forEach((pt, idx) => {
+        const px = sx + (idx / (series.length - 1)) * sw;
+        const py = sy + sh - 10 - Math.min(1, pt.accelG / maxG) * (sh - 24);
+        if (idx === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      });
+      ctx.stroke();
+
+      if (ev && ev.snifferDamagedRelTime !== null && ev.snifferDamagedRelTime !== undefined) {
+        ctx.fillStyle = '#fb7185';
+        ctx.font = 'bold 16px monospace';
+        ctx.fillText(`🪨 Corte RPi5 (+${ev.snifferDamagedRelTime.toFixed(1)}s)`, sx + 12, sy + 24);
+      }
+    }
+
+    this.vrDataTex.needsUpdate = true;
+  }
+
+  _getXrHeadWorldPose() {
+    this.xrRig.updateMatrixWorld(true);
+    const xrCam =
+      this.renderer.xr?.isPresenting && typeof this.renderer.xr.getCamera === 'function'
+        ? this.renderer.xr.getCamera()
+        : this.camera;
+    xrCam.updateMatrixWorld(true);
+    const headPos = new THREE.Vector3().setFromMatrixPosition(xrCam.matrixWorld);
+    const worldQuat = new THREE.Quaternion();
+    xrCam.getWorldQuaternion(worldQuat);
+    const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(worldQuat);
+    forward.y = 0;
+    if (forward.lengthSq() < 1e-5) forward.set(0, 0, -1);
+    forward.normalize();
+    return { headPos, forward, xrCam, worldQuat };
+  }
+
+  summonVrMenuInFront(sideAngleRad = 0, forceShow = true) {
+    if (!this.vrMenuGroup) return;
+    if (forceShow) this.vrMenuVisible = true;
+    this.vrMenuGroup.visible = this.vrMenuVisible;
+
+    const { headPos, forward } = this._getXrHeadWorldPose();
+    const baseYaw = Math.atan2(-forward.x, -forward.z) + sideAngleRad;
+    const dist = 1.34;
+    const mx = headPos.x - Math.sin(baseYaw) * dist;
+    const mz = headPos.z - Math.cos(baseYaw) * dist;
+    const my = Math.max(this.xrRig.position.y + 0.92, headPos.y - 0.16);
+
+    this.vrMenuGroup.position.set(mx, my, mz);
+    this.vrMenuGroup.lookAt(headPos.x, headPos.y - 0.06, headPos.z);
+    this._updateVrMenuStatusHeader();
+    if (this.vrConsoleOpen) this._updateVrDataBoardCanvas();
+  }
+
+  teleportXrTo(targetWorldX, targetFeetY, targetWorldZ, targetYaw = this.xrYaw, keepMenuSide = -0.44) {
+    this.xrRig.updateMatrixWorld(true);
+    const { headPos } = this._getXrHeadWorldPose();
+    const invRig = new THREE.Matrix4().copy(this.xrRig.matrixWorld).invert();
+    const headLocal = headPos.clone().applyMatrix4(invRig);
+
+    // Compensate for seated VR users (if physical headset height < 1.15m above floor, add comfortable standing offset)
+    const seatedBoost = headLocal.y > 0.05 && headLocal.y < 1.15 ? 0.45 : 0.0;
+
+    this.xrYaw = targetYaw;
+    this.xrVelY = 0;
+    this.xrGrounded = true;
+    this.xrRig.rotation.set(0, this.xrYaw, 0);
+
+    const cosY = Math.cos(this.xrYaw);
+    const sinY = Math.sin(this.xrYaw);
+    const worldOffsetX = headLocal.x * cosY + headLocal.z * sinY;
+    const worldOffsetZ = -headLocal.x * sinY + headLocal.z * cosY;
+
+    this.xrRig.position.set(
+      targetWorldX - worldOffsetX,
+      targetFeetY + seatedBoost,
+      targetWorldZ - worldOffsetZ
+    );
+    this.xrRig.updateMatrixWorld(true);
+
+    // Keep fpPos synchronized too!
+    this.fpPos.set(targetWorldX, targetFeetY, targetWorldZ);
+    this.fpYaw = targetYaw;
+
+    if (this.vrMenuVisible) {
+      this.summonVrMenuInFront(keepMenuSide, true);
+    }
+  }
+
+  teleportXrToPreset(preset) {
+    const presets = {
+      view_exterior: { x: 2.2, y: 0.14, z: 11.4, yaw: 0.15 },
+      floor_0: { x: -0.8, y: 0.22, z: 1.85, yaw: 0.32 },
+      floor_1: { x: -2.4, y: 3.42, z: 1.35, yaw: -0.22 },
+      floor_2: { x: -0.8, y: 6.62, z: 1.55, yaw: 0.24 },
+      floor_3: { x: -1.1, y: 9.82, z: 1.75, yaw: 0.35 },
+      floor_4: { x: -0.8, y: 13.08, z: 1.5, yaw: 0.12 },
+      // Close-up right in front of Piso 2 Sniffer RPi 5 + calibrated OLED!
+      view_sniffer: {
+        x: SNIFFER_WORLD_POS.x + 0.05,
+        y: 3.42,
+        z: SNIFFER_WORLD_POS.z + 1.35,
+        yaw: 0.0
+      },
+      // Close-up beside Outdoor Street Light Pole, Winch & 3-LED Gateway!
+      view_gateway: {
+        x: POLE_WORLD_POS.x - 2.1,
+        y: 0.14,
+        z: POLE_WORLD_POS.z + 1.3,
+        yaw: -0.98
+      }
+    };
+    const p = presets[preset] || presets.view_exterior;
+    if (this.renderer.xr?.isPresenting) {
+      this.teleportXrTo(p.x, p.y, p.z, p.yaw, -0.46);
+    } else {
+      this.setCameraMode('firstperson');
+      this.fpPos.set(p.x, p.y, p.z);
+      this.fpYaw = p.yaw;
+      this.fpPitch = preset === 'view_sniffer' ? -0.02 : 0.04;
+      this.fpVelY = 0;
+      this.fpGrounded = true;
+      this.camera.position.set(p.x, p.y + 1.58, p.z);
+    }
+  }
+
+  _handleVrUiAction(action) {
+    if (
+      action === 'view_exterior' ||
+      action === 'floor_0' ||
+      action === 'floor_1' ||
+      action === 'floor_2' ||
+      action === 'floor_3' ||
+      action === 'floor_4' ||
+      action === 'view_sniffer' ||
+      action === 'view_gateway'
+    ) {
+      this.teleportXrToPreset(action);
+      if (this.cb.onVrAction) this.cb.onVrAction(action);
+      return;
+    }
+
+    if (action === 'summon_menu' || action === 'recenter_menu') {
+      this.summonVrMenuInFront(0, true);
+    } else if (action === 'toggle_pole') {
+      if (this.cb.onPoleClick) this.cb.onPoleClick();
+      this._updateVrMenuStatusHeader();
+      this._updateVrDataBoardCanvas();
+    } else if (action === 'toggle_vr_console') {
+      this.vrConsoleOpen = !this.vrConsoleOpen;
+      if (this.vrDataBoard) this.vrDataBoard.visible = this.vrConsoleOpen;
+      if (this.sim.canExtractGateway()) {
+        this.sim.dataExtractedByOperator = true;
+      }
+      this._updateVrDataBoardCanvas();
+      if (this.cb.onVrAction) this.cb.onVrAction('toggle_vr_console');
+    } else if (action === 'toggle_vr_flight') {
+      this.vrFlightMode = !this.vrFlightMode;
+      this._updateVrMenuStatusHeader();
+    } else if (action === 'shove_props') {
+      const { headPos, forward } = this._getXrHeadWorldPose();
+      this.fpPos.set(headPos.x, this.xrRig.position.y, headPos.z);
+      this.fpYaw = Math.atan2(-forward.x, -forward.z);
+      const prevMode = this.cameraMode;
+      this.cameraMode = 'firstperson';
+      this.triggerOperatorShove();
+      this.cameraMode = prevMode;
+    } else if (action === 'toggle_flashlight') {
+      this.toggleFlashlight();
+    } else if (action.startsWith('sc_')) {
+      if (this.cb.onVrAction) this.cb.onVrAction(action);
+      this._updateVrMenuStatusHeader();
+    }
+  }
+
+  _setRaycasterFromXrController(ctrl) {
+    ctrl.updateMatrixWorld(true);
+    this._xrTempMatrix.identity().extractRotation(ctrl.matrixWorld);
+    this.raycaster.ray.origin.setFromMatrixPosition(ctrl.matrixWorld);
+    this.raycaster.ray.direction.set(0, 0, -1).applyMatrix4(this._xrTempMatrix).normalize();
+  }
+
+  _onXrControllerSelect(ctrl) {
+    if (!this.renderer.xr?.isPresenting) return;
+    this._setRaycasterFromXrController(ctrl);
+
+    // 1. Check Wrist Summon Button
+    if (this.vrWristBtn) {
+      const wristHit = this.raycaster.intersectObject(this.vrWristBtn, false);
+      if (wristHit.length > 0) {
+        this.summonVrMenuInFront(0, true);
+        return;
+      }
+    }
+
+    // 2. Check Floating 3D VR Menu Buttons (and Tablet Frame Blocker so gaps don't teleport!)
+    if (this.vrMenuGroup?.visible) {
+      const uiHits = this.raycaster.intersectObjects(this.vrUiButtons, false);
+      if (uiHits.length > 0) {
+        const act = uiHits[0].object.userData.vrAction;
+        if (act) this._handleVrUiAction(act);
+        return;
+      }
+      const panelBlockers = [this.vrMenuBacking, this.vrDataBoard?.visible ? this.vrDataBoard : null].filter(Boolean);
+      if (panelBlockers.length > 0 && this.raycaster.intersectObjects(panelBlockers, false).length > 0) {
+        return;
+      }
+    }
+
+    // 3. Check Interactive 3D Hardware (Gateway, Pole Winch, Sniffer RPi 5)
+    if (this.raycaster.intersectObjects(this.clickableGateway, true).length > 0) {
+      if (this.sim.gatewayPoleState === 'down') {
+        this.vrConsoleOpen = true;
+        if (this.vrDataBoard) this.vrDataBoard.visible = true;
+        this.sim.dataExtractedByOperator = true;
+        this.summonVrMenuInFront(-0.25, true);
+        this._updateVrDataBoardCanvas();
+        if (this.cb.onGatewayClick) this.cb.onGatewayClick();
+      } else if (this.cb.onPoleClick) {
+        this.cb.onPoleClick();
+      }
+      return;
+    }
+
+    if (this.raycaster.intersectObjects(this.clickablePole, true).length > 0) {
+      if (this.cb.onPoleClick) this.cb.onPoleClick();
+      return;
+    }
+
+    if (this.raycaster.intersectObjects(this.clickableSniffer, true).length > 0) {
+      const { headPos } = this._getXrHeadWorldPose();
+      const dSniffer = Math.hypot(headPos.x - SNIFFER_WORLD_POS.x, headPos.z - SNIFFER_WORLD_POS.z);
+      if (dSniffer > 3.0) {
+        this.teleportXrToPreset('view_sniffer');
+      } else if (!this.sim.snifferDamaged) {
+        this.sim.hitSnifferTable();
+      }
+      return;
+    }
+
+    // 4. Point-and-Teleport onto ANY Walkable Surface (Plaza, Piso 1–4, Stairwell, Rooftop)!
+    const floorHits = this.raycaster.intersectObjects(this.walkableTeleportMeshes, false);
+    if (floorHits.length > 0) {
+      const hit = floorHits[0];
+      if (hit.distance < 36.0) {
+        const targetFeetY = this._getSupportHeight(hit.point.x, hit.point.z, hit.point.y + 0.25);
+        const col = this._resolveOperatorCollisions(hit.point.x, hit.point.z, targetFeetY, targetFeetY + 1.65);
+        this.teleportXrTo(col.x, targetFeetY, col.z, this.xrYaw, -0.46);
+      }
+    }
+  }
+
+  onXrSessionStart() {
+    this.stopIntroOrbit();
+    this.controls.enabled = false;
+    this.vrMenuVisible = true;
+    this.vrFlightMode = false;
+    this.xrYaw = 0.15;
+    this.xrRig.position.set(2.2, 0.14, 11.2);
+    this.xrRig.rotation.set(0, this.xrYaw, 0);
+    this.xrRig.updateMatrixWorld(true);
+    // Place the VR Control Tablet right in front of the user as soon as VR starts
+    this.summonVrMenuInFront(-0.18, true);
+  }
+
+  onXrSessionEnd() {
+    this.vrMenuVisible = false;
+    if (this.vrMenuGroup) this.vrMenuGroup.visible = false;
+    if (this.xrTeleportRing) this.xrTeleportRing.visible = false;
+    if (this.xrAimDot) this.xrAimDot.visible = false;
+    this.xrRig.position.set(0, 0, 0);
+    this.xrRig.rotation.set(0, 0, 0);
+    this.xrRig.updateMatrixWorld(true);
+    this.setCameraMode(this.cameraMode || 'tactical');
+  }
+
+  setTouchInput(partial) {
+    Object.assign(this.touchInput, partial);
+  }
+
+  _readXrStick(gamepad) {
+    if (!gamepad || !Array.isArray(gamepad.axes) || gamepad.axes.length < 2) {
+      return { x: 0, y: 0 };
+    }
+    const ax2 = gamepad.axes.length >= 4 ? gamepad.axes[2] : 0;
+    const ax3 = gamepad.axes.length >= 4 ? gamepad.axes[3] : 0;
+    const ax0 = gamepad.axes[0] || 0;
+    const ax1 = gamepad.axes[1] || 0;
+    return {
+      x: Math.abs(ax2) >= Math.abs(ax0) ? ax2 : ax0,
+      y: Math.abs(ax3) >= Math.abs(ax1) ? ax3 : ax1
+    };
+  }
+
+  _updateXrLocomotionAndControllers(dt) {
+    if (this._xrSnapTurnCooldown > 0) this._xrSnapTurnCooldown -= dt;
+    if (this._xrButtonCooldown > 0) this._xrButtonCooldown -= dt;
+
+    if (this.vrMenuGroup) {
+      this.vrMenuGroup.visible = this.vrMenuVisible;
+    }
+
+    // 1. Read WebXR InputSources (Thumbsticks & Buttons — Guardian-independent locomotion!)
+    const session = this.renderer.xr.getSession ? this.renderer.xr.getSession() : null;
+    let moveStickX = 0;
+    let moveStickY = 0;
+    let turnStickX = 0;
+    let rightStickY = 0;
+    let turboHeld = false;
+
+    if (session && session.inputSources) {
+      const sources = Array.from(session.inputSources);
+      sources.forEach((src, idx) => {
+        if (!src || !src.gamepad) return;
+        const gp = src.gamepad;
+        const stick = this._readXrStick(gp);
+        const hand = src.handedness;
+
+        if (hand === 'left' || (sources.length === 1 && hand !== 'right')) {
+          moveStickX = stick.x;
+          moveStickY = stick.y;
+          if (gp.buttons?.[1]?.pressed || gp.buttons?.[3]?.pressed) turboHeld = true;
+        } else if (hand === 'right') {
+          turnStickX = stick.x;
+          rightStickY = stick.y;
+          if (gp.buttons?.[1]?.pressed) turboHeld = true;
+        } else if (idx === 0) {
+          moveStickX = stick.x;
+          moveStickY = stick.y;
+        } else {
+          turnStickX = stick.x;
+          rightStickY = stick.y;
+        }
+
+        // B / Y secondary button (index 5) summons/recenters VR menu; A / X button (index 4) jumps!
+        if (this._xrButtonCooldown <= 0) {
+          if (gp.buttons?.[5]?.pressed) {
+            this._xrButtonCooldown = 0.35;
+            this.summonVrMenuInFront(0, true);
+          } else if (gp.buttons?.[4]?.pressed && !this.vrFlightMode && this.xrGrounded) {
+            this._xrButtonCooldown = 0.35;
+            this.xrVelY = 5.8;
+            this.xrGrounded = false;
+          }
+        }
+      });
+    }
+
+    const { headPos, forward, worldQuat } = this._getXrHeadWorldPose();
+    const rightVec = new THREE.Vector3(-forward.z, 0, forward.x).normalize();
+
+    // 2. Comfort Snap Turn (45 deg) on Right Stick X around player's real head position!
+    if (Math.abs(turnStickX) > 0.62 && this._xrSnapTurnCooldown <= 0) {
+      this._xrSnapTurnCooldown = 0.32;
+      const snapAngle = turnStickX > 0 ? -Math.PI / 4 : Math.PI / 4;
+      const invRig = new THREE.Matrix4().copy(this.xrRig.matrixWorld).invert();
+      const headLocal = headPos.clone().applyMatrix4(invRig);
+      this.xrYaw += snapAngle;
+      this.xrRig.rotation.set(0, this.xrYaw, 0);
+      const cosY = Math.cos(this.xrYaw);
+      const sinY = Math.sin(this.xrYaw);
+      const worldOffX = headLocal.x * cosY + headLocal.z * sinY;
+      const worldOffZ = -headLocal.x * sinY + headLocal.z * cosY;
+      this.xrRig.position.x = headPos.x - worldOffX;
+      this.xrRig.position.z = headPos.z - worldOffZ;
+      this.xrRig.updateMatrixWorld(true);
+    }
+
+    // 3. Smooth Left-Stick Movement (Walk with Building/Stair Collisions OR 6-DOF VR Flight!)
+    const deadzone = 0.14;
+    const stickMag = Math.hypot(moveStickX, moveStickY);
+    if (this.vrFlightMode) {
+      const flySpd = (turboHeld ? 13.5 : 6.8) * dt;
+      if (stickMag > deadzone) {
+        const fullFwd = new THREE.Vector3(0, 0, -1).applyQuaternion(worldQuat).normalize();
+        this.xrRig.position.x += (fullFwd.x * -moveStickY + rightVec.x * moveStickX) * flySpd;
+        this.xrRig.position.y += fullFwd.y * -moveStickY * flySpd;
+        this.xrRig.position.z += (fullFwd.z * -moveStickY + rightVec.z * moveStickX) * flySpd;
+      }
+      if (Math.abs(rightStickY) > deadzone) {
+        this.xrRig.position.y += -rightStickY * flySpd * 0.9;
+      }
+      this.xrRig.position.x = Math.max(-40, Math.min(40, this.xrRig.position.x));
+      this.xrRig.position.y = Math.max(0.14, Math.min(34, this.xrRig.position.y));
+      this.xrRig.position.z = Math.max(-30, Math.min(38, this.xrRig.position.z));
+    } else {
+      // Grounded VR Walking with Solid Wall Collisions & 4-Story Stairwell Climbing!
+      const walkSpd = (turboHeld ? 7.6 : 4.8);
+      let vx = 0;
+      let vz = 0;
+      if (stickMag > deadzone) {
+        vx = (forward.x * -moveStickY + rightVec.x * moveStickX) * walkSpd;
+        vz = (forward.z * -moveStickY + rightVec.z * moveStickX) * walkSpd;
+      }
+
+      const curFeetY = this.xrRig.position.y;
+      const nextHeadX = headPos.x + vx * dt;
+      const nextHeadZ = headPos.z + vz * dt;
+      const col = this._resolveOperatorCollisions(nextHeadX, nextHeadZ, curFeetY, curFeetY + 1.72);
+      const deltaX = col.x - headPos.x;
+      const deltaZ = col.z - headPos.z;
+      this.xrRig.position.x += deltaX;
+      this.xrRig.position.z += deltaZ;
+
+      this.xrVelY -= 18.5 * dt;
+      let candY = curFeetY + this.xrVelY * dt;
+      const supY = this._getSupportHeight(col.x, col.z, curFeetY);
+      if (candY <= supY || (this.xrGrounded && this.xrVelY <= 0 && candY - supY < 0.38)) {
+        candY = supY;
+        this.xrVelY = 0;
+        this.xrGrounded = true;
+      } else {
+        this.xrGrounded = false;
+      }
+      this.xrRig.position.y = candY;
+
+      if (stickMag > deadzone) {
+        this._pushNearbyDynamicProps(col.x, candY, col.z, vx, vz);
+      }
+    }
+
+    // Keep open VR Tablet comfortably oriented & within reach when walking across floors/plaza!
+    if (this.vrMenuGroup?.visible) {
+      const { headPos: updatedHead } = this._getXrHeadWorldPose();
+      const menuDist = updatedHead.distanceTo(this.vrMenuGroup.position);
+      if (menuDist > 2.95) {
+        this.summonVrMenuInFront(-0.22, true);
+      } else {
+        this.vrMenuGroup.lookAt(updatedHead.x, this.vrMenuGroup.position.y + 0.08, updatedHead.z);
+      }
+    }
+
+    // 4. Laser Hover Highlights on VR Menu + Floor Teleport Reticle
+    let hoveredBtn = null;
+    let floorTeleportHit = null;
+    let aimHitPoint = null;
+
+    for (let i = 0; i < this.xrControllers.length; i++) {
+      const ctrl = this.xrControllers[i];
+      this._setRaycasterFromXrController(ctrl);
+      let rayLen = 11.0;
+
+      if (this.vrMenuGroup?.visible) {
+        const uiHits = this.raycaster.intersectObjects(this.vrUiButtons, false);
+        if (uiHits.length > 0) {
+          hoveredBtn = uiHits[0].object;
+          rayLen = uiHits[0].distance;
+          aimHitPoint = uiHits[0].point;
+        }
+      }
+
+      if (!aimHitPoint) {
+        const hwHits = this.raycaster.intersectObjects(
+          [...this.clickableGateway, ...this.clickablePole, ...this.clickableSniffer],
+          true
+        );
+        if (hwHits.length > 0 && hwHits[0].distance < 18) {
+          rayLen = hwHits[0].distance;
+          aimHitPoint = hwHits[0].point;
+        } else {
+          const flHits = this.raycaster.intersectObjects(this.walkableTeleportMeshes, false);
+          if (flHits.length > 0 && flHits[0].distance < 28) {
+            rayLen = flHits[0].distance;
+            floorTeleportHit = flHits[0].point;
+          }
+        }
+      }
+
+      if (ctrl.userData.laserLine) {
+        ctrl.userData.laserLine.scale.z = Math.max(0.15, rayLen);
+      }
+    }
+
+    // Redraw VR buttons only when hover/active state changes
+    this.vrUiButtons.forEach((btn) => {
+      const ud = btn.userData;
+      const isHov = btn === hoveredBtn;
+      const isAct =
+        (ud.vrAction === 'toggle_vr_flight' && this.vrFlightMode) ||
+        (ud.vrAction === 'toggle_vr_console' && this.vrConsoleOpen) ||
+        (ud.vrAction === 'toggle_flashlight' && this.fpFlashlightOn) ||
+        (ud.vrAction === `sc_${this.sim.scenario}`);
+      if (ud.hovered !== isHov || ud.active !== isAct) {
+        ud.hovered = isHov;
+        ud.active = isAct;
+        this._drawVrButtonCanvas(ud.canvas, ud.title, ud.sub, ud.accent, isHov, isAct);
+        ud.tex.needsUpdate = true;
+        btn.scale.setScalar(isHov ? 1.05 : 1.0);
+      }
+    });
+
+    if (aimHitPoint) {
+      this.xrAimDot.visible = true;
+      this.xrAimDot.position.copy(aimHitPoint);
+      this.xrTeleportRing.visible = false;
+    } else if (floorTeleportHit) {
+      this.xrAimDot.visible = false;
+      this.xrTeleportRing.visible = true;
+      this.xrTeleportRing.position.set(floorTeleportHit.x, floorTeleportHit.y + 0.03, floorTeleportHit.z);
+    } else {
+      this.xrAimDot.visible = false;
+      this.xrTeleportRing.visible = false;
+    }
+
+    // Refresh VR status header & holographic console periodically (~5 Hz)
+    this._vrRefreshTick = (this._vrRefreshTick || 0) + 1;
+    if (this._vrRefreshTick % 12 === 0) {
+      this._updateVrMenuStatusHeader();
+      if (this.vrConsoleOpen) this._updateVrDataBoardCanvas();
+    }
+  }
+
   _bindInputs() {
     window.addEventListener('keydown', (e) => {
       const tag = document.activeElement?.tagName;
@@ -2977,9 +3869,19 @@ export class LPSBoxScene3D {
   }
 
   getOperatorStatus() {
-    const y = this.cameraMode === 'freefly' ? this.camera.position.y : this.fpPos.y;
-    const x = this.cameraMode === 'freefly' ? this.camera.position.x : this.fpPos.x;
-    const z = this.cameraMode === 'freefly' ? this.camera.position.z : this.fpPos.z;
+    let x = this.fpPos.x;
+    let y = this.fpPos.y;
+    let z = this.fpPos.z;
+    if (this.renderer.xr?.isPresenting) {
+      const { headPos } = this._getXrHeadWorldPose();
+      x = headPos.x;
+      y = this.xrRig.position.y;
+      z = headPos.z;
+    } else if (this.cameraMode === 'freefly') {
+      x = this.camera.position.x;
+      y = this.camera.position.y;
+      z = this.camera.position.z;
+    }
 
     let location = 'Calle / Plaza Exterior';
     if (x >= 5.48 && x <= 9.0 && z >= -4.1 && z <= 3.6) {
@@ -3219,10 +4121,19 @@ export class LPSBoxScene3D {
       }
     }
 
-    // 6. Camera Controls: Operator Solid Physics ('firstperson'), Free-Fly 6DOF ('freefly'), or Orbit
-    if (!this.renderer.xr.isPresenting) {
+    // 6. Camera Controls: WebXR VR Locomotion, Operator Solid Physics ('firstperson'), Free-Fly ('freefly'), or Orbit
+    if (this.renderer.xr.isPresenting) {
+      this._updateXrLocomotionAndControllers(dt);
+    } else {
+      // Apply smooth on-screen Touch Look joystick if active
+      if (Math.abs(this.touchInput.lookX) > 0.02 || Math.abs(this.touchInput.lookY) > 0.02) {
+        this.fpYaw -= this.touchInput.lookX * 2.15 * dt;
+        this.fpPitch = Math.max(-1.38, Math.min(1.38, this.fpPitch - this.touchInput.lookY * 1.65 * dt));
+      }
+
       if (this.cameraMode === 'firstperson') {
-        const baseSpeed = this.fpCrouching ? 3.1 : this.keys.shift ? 8.1 : 5.2;
+        const isSprinting = this.keys.shift || this.touchInput.sprint;
+        const baseSpeed = this.fpCrouching ? 3.1 : isSprinting ? 8.1 : 5.2;
         const fwdX = -Math.sin(this.fpYaw);
         const fwdZ = -Math.cos(this.fpYaw);
         const rightX = Math.cos(this.fpYaw);
@@ -3247,16 +4158,23 @@ export class LPSBoxScene3D {
           moveZ += rightZ;
         }
 
+        // Blend analog Touch Movement thumbstick seamlessly!
+        if (Math.hypot(this.touchInput.moveX, this.touchInput.moveY) > 0.04) {
+          moveX += fwdX * -this.touchInput.moveY + rightX * this.touchInput.moveX;
+          moveZ += fwdZ * -this.touchInput.moveY + rightZ * this.touchInput.moveX;
+        }
+
         const moveLen = Math.hypot(moveX, moveZ);
         let velX = 0;
         let velZ = 0;
         if (moveLen > 0.001) {
-          velX = (moveX / moveLen) * baseSpeed;
-          velZ = (moveZ / moveLen) * baseSpeed;
+          const analogScale = Math.min(1.0, moveLen);
+          velX = (moveX / moveLen) * baseSpeed * analogScale;
+          velZ = (moveZ / moveLen) * baseSpeed * analogScale;
         }
 
-        // Jump when grounded
-        if (this.keys.space && this.fpGrounded) {
+        // Jump when grounded (Keyboard Space or Touch Jump button)
+        if ((this.keys.space || this.touchInput.up) && this.fpGrounded) {
           this.fpVelY = 6.15;
           this.fpGrounded = false;
         }
@@ -3320,7 +4238,7 @@ export class LPSBoxScene3D {
         }
 
         // Subtle head-bob + seismic ground tremor felt by Operator!
-        const walkBob = moveLen > 0.01 && this.fpGrounded ? Math.sin(this.sim.time * (this.keys.shift ? 15 : 10.5)) * 0.032 : 0;
+        const walkBob = moveLen > 0.01 && this.fpGrounded ? Math.sin(this.sim.time * (isSprinting ? 15 : 10.5)) * 0.032 : 0;
         const quakeJitterX = gAmp > 0.03 ? (Math.random() - 0.5) * Math.min(0.09, gAmp * 0.12) : 0;
         const quakeJitterY = gAmp > 0.03 ? (Math.random() - 0.5) * Math.min(0.07, gAmp * 0.1) : 0;
 
@@ -3334,7 +4252,7 @@ export class LPSBoxScene3D {
         this.camera.rotation.x = this.fpPitch;
       } else if (this.cameraMode === 'freefly') {
         // Unrestricted 6-DOF Free-View flight mode ('Vista Libre')
-        const flySpeed = (this.keys.shift ? 19.5 : 8.6) * dt;
+        const flySpeed = (this.keys.shift || this.touchInput.sprint ? 19.5 : 8.6) * dt;
         const cosPitch = Math.cos(this.fpPitch);
         const dirX = -Math.sin(this.fpYaw) * cosPitch;
         const dirY = Math.sin(this.fpPitch);
@@ -3360,10 +4278,15 @@ export class LPSBoxScene3D {
           this.camera.position.x += rightX * flySpeed;
           this.camera.position.z += rightZ * flySpeed;
         }
-        if (this.keys.space) {
+        if (Math.hypot(this.touchInput.moveX, this.touchInput.moveY) > 0.04) {
+          this.camera.position.x += (dirX * -this.touchInput.moveY + rightX * this.touchInput.moveX) * flySpeed;
+          this.camera.position.y += dirY * -this.touchInput.moveY * flySpeed;
+          this.camera.position.z += (dirZ * -this.touchInput.moveY + rightZ * this.touchInput.moveX) * flySpeed;
+        }
+        if (this.keys.space || this.touchInput.up) {
           this.camera.position.y += flySpeed;
         }
-        if (this.keys.c || this.keys.q) {
+        if (this.keys.c || this.keys.q || this.touchInput.down) {
           this.camera.position.y -= flySpeed;
         }
 
