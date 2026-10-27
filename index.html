@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>LPSBOX System — Simulador VR / MR de Emergencia Sísmica</title>
-  <meta name="description" content="Juego y simulador 3D / WebXR (VR & MR) de emergencia sísmica en donde el Sniffer ESP32/MPU6050 y el Gateway Raspberry Pi 5 del sistema LPSBOX operan en tiempo real." />
+  <title>LPSBOX System — Simulador VR / MR de Emergencia Sísmica (Edificio 4 Pisos)</title>
+  <meta name="description" content="Juego y simulador 3D / WebXR (VR & MR) de emergencia sísmica para LPSBOX: Sniffer interior en Raspberry Pi 5 + MPU6050 y Gateway exterior en poste de luz con descenso mecánico." />
   <link rel="stylesheet" href="./css/styles.css" />
   <script type="importmap">
     {
@@ -21,7 +21,7 @@
       <div class="brand-badge">LPS</div>
       <div class="brand-text">
         <h1>LPSBOX System — Operador VR / MR</h1>
-        <span>Simulador de Emergencia Sísmica · ESP32 Sniffer + MPU6050 + Raspberry Pi 5 Gateway</span>
+        <span>Edificio 4 Pisos · Sniffer RPi 5 + MPU6050 (Interior) → Gateway en Poste de Luz (Exterior)</span>
       </div>
     </div>
 
@@ -66,25 +66,25 @@
     <div class="start-overlay" id="start-experience-overlay">
       <div class="start-modal">
         <div class="start-kicker" id="start-stl-status">
-          ● SISTEMA LPSBOX EN LÍNEA · ESCENA 3D ACTIVA
+          ● EDIFICIO DE 4 PISOS EN LÍNEA · SNIFFER RPi5 + GATEWAY EN POSTE
         </div>
         <h2>Simulador VR / MR — Operador LPSBOX</h2>
         <p>
-          Asume el puesto de <strong>Operario de Emergencia Sísmica</strong>. Controla escenarios en tiempo real, observa cómo reaccionan las personas y los sensores <strong>ESP32 Sniffer + MPU6050</strong>, supervisa los <strong>3 LEDs físicos del Gateway (Raspberry Pi 5)</strong> y determina cuántas personas había y dónde se ubicaban con su celular antes del sismo (<code>t₀</code>).
+          Eres el <strong>Operario de Emergencia Sísmica</strong> frente a un <strong>edificio instrumentado de 4 pisos</strong>. Adentro (Piso 2), el <strong>Sniffer sobre Raspberry Pi 5 + MPU6050</strong> detecta el sismo y captura los celulares cercanos; afuera, el <strong>Gateway sin pantalla</strong> está montado a <strong>4.65 m en un poste de luz</strong>. ¡Controla el escenario, observa las reacciones y objetos caer, <strong>baja el Gateway del poste</strong> y reporta cuántas personas había en cada piso antes del terremoto (<code>t₀</code>)!
         </p>
 
         <div class="start-features">
           <div class="start-feat">
-            <strong>📡 1. Crowd Sniffer (10s)</strong>
-            Captura pasiva WiFi/BLE filtrando MACs aleatorias para ubicar personas por zona.
+            <strong>🏢 1. Sniffer en RPi 5 (Interior)</strong>
+            En Piso 2 junto al sensor sísmico <code>MPU6050 (STA/LTA)</code> + conteo WiFi/BLE en 4 pisos.
           </div>
           <div class="start-feat">
-            <strong>🌋 2. Sensor MPU6050</strong>
-            Algoritmo <code>STA/LTA</code> ante sismos leves, terremotos severos o golpes en la mesa.
+            <strong>🏮 2. Gateway en Poste de Luz</strong>
+            Receptor exterior con 3 LEDs a 4.65 m: bájalo con la polea para extraer datos por USB-C.
           </div>
           <div class="start-feat">
-            <strong>💡 3. Gateway 3 LEDs</strong>
-            Caja sin pantalla: LED Azul (sin datos), Titileo (RX) y Amarillo (datos <code>t₀</code> listos).
+            <strong>📈 3. Registro Sísmico Completo</strong>
+            Visualiza toda la traza de ondas del sismo leve o terremoto durante y después del evento.
           </div>
         </div>
 
@@ -94,10 +94,10 @@
 
         <div class="start-quick-row">
           <button class="btn" id="btn-start-mild" type="button">
-            🟡 Iniciar con Sismo Tranqui (4.2 Mw)
+            🟡 Iniciar con Sismo Pequeño (4.2 Mw)
           </button>
           <button class="btn btn-danger" id="btn-start-major" type="button">
-            🔴 Iniciar con Terremoto Severo (6.9 Mw)
+            🔴 Iniciar con Terremoto Fuerte (6.9 Mw)
           </button>
         </div>
       </div>
@@ -110,26 +110,26 @@
         <!-- Mission Stepper -->
         <div class="hud-card" id="card-mission">
           <div class="hud-card-header">
-            <div class="hud-card-title">🎯 Misión del Operario LPSBOX</div>
+            <div class="hud-card-title">🎯 Misión del Operario (Edificio 4 Pisos)</div>
             <button class="collapse-btn" data-collapse="card-mission">−</button>
           </div>
           <div class="hud-card-body">
             <div class="mission-steps">
               <div class="mission-step current" id="mstep-1">
                 <span class="step-num">1</span>
-                <span>Inicia un escenario (<strong>Sismo Tranqui</strong> o <strong>Terremoto</strong>) y observa la reacción.</span>
+                <span>Dispara un <strong>Sismo Pequeño</strong> o <strong>Terremoto Fuerte</strong> y observa los 4 pisos.</span>
               </div>
               <div class="mission-step" id="mstep-2">
                 <span class="step-num">2</span>
-                <span>Verifica en el Gateway el paso de <strong>LED Azul → Titileo → LED Amarillo</strong>.</span>
+                <span>El <strong>Sniffer RPi5</strong> envía <code>t₀</code> al poste exterior (<strong>LED Amarillo ON</strong>).</span>
               </div>
               <div class="mission-step" id="mstep-3">
                 <span class="step-num">3</span>
-                <span>Pulsa <strong>Extraer Datos (USB-C)</strong> y filtra las MACs aleatorias del Sniffer.</span>
+                <span><strong>Baja el Gateway del poste de luz [B]</strong> y extrae los datos por USB-C <strong>[E]</strong>.</span>
               </div>
               <div class="mission-step" id="mstep-4">
                 <span class="step-num">4</span>
-                <span>Reporta <strong>cuántas personas había y dónde se ubicaban</strong> antes del sismo (<code>t₀</code>).</span>
+                <span>Reporta <strong>cuántas personas había por piso (1 a 4)</strong> antes del sismo.</span>
               </div>
             </div>
           </div>
@@ -145,19 +145,19 @@
             <div class="scenario-grid">
               <button class="scenario-btn sc-normal active" id="btn-sc-normal">
                 <strong>🟢 Monitoreo Base</strong>
-                <small>Sin sismo · actividad normal y sondeo WiFi/BLE</small>
+                <small>4 pisos en calma · actividad cotidiana y WiFi/BLE</small>
               </button>
               <button class="scenario-btn sc-mild" id="btn-sc-mild">
-                <strong>🟡 Sismo Tranqui</strong>
-                <small>4.2 Mw · reacción calmada y evacuación preventiva</small>
+                <strong>🟡 Sismo Pequeño</strong>
+                <small>4.2 Mw (14 s) · lámparas oscilan y calma preventiva</small>
               </button>
               <button class="scenario-btn sc-major" id="btn-sc-major">
-                <strong>🔴 Terremoto Severo</strong>
-                <small>6.9 Mw · colapso parcial, corte y atrapados</small>
+                <strong>🔴 Terremoto Fuerte</strong>
+                <small>6.9 Mw (22.5 s) · caída de objetos y evacuación</small>
               </button>
               <button class="scenario-btn sc-hit" id="btn-sc-hit">
-                <strong>🟠 Golpe en Mesa</strong>
-                <small>Impulso MPU6050 · onda de choque MR [Tecla G]</small>
+                <strong>🟠 Golpe MPU6050</strong>
+                <small>Impulso en RPi5 · onda de escaneo MR [Tecla G]</small>
               </button>
             </div>
 
@@ -169,18 +169,18 @@
             <div id="sandbox-controls" style="display: none;">
               <div class="control-group">
                 <div class="control-label">
-                  <span>Personas en el edificio</span>
-                  <code id="val-people">16</code>
+                  <span>Personas en los 4 pisos</span>
+                  <code id="val-people">18</code>
                 </div>
-                <input type="range" id="slider-people" min="4" max="30" step="1" value="16" />
+                <input type="range" id="slider-people" min="4" max="34" step="1" value="18" />
               </div>
 
               <div class="control-group">
                 <div class="control-label">
                   <span>Magnitud personalizada</span>
-                  <code id="val-mag">6.2 Mw</code>
+                  <code id="val-mag">6.5 Mw</code>
                 </div>
-                <input type="range" id="slider-mag" min="3.0" max="7.8" step="0.1" value="6.2" />
+                <input type="range" id="slider-mag" min="3.0" max="7.8" step="0.1" value="6.5" />
               </div>
 
               <div class="btn-row" style="margin-bottom: 8px;">
@@ -214,74 +214,98 @@
           </div>
           <div class="hud-card-body">
             <div class="cam-grid">
-              <button class="cam-btn active" data-cam="tactical">🛸 Vista Táctica</button>
+              <button class="cam-btn active" data-cam="tactical">🏢 Edificio 4 Pisos</button>
               <button class="cam-btn" data-cam="firstperson">🚶 Operario (WASD)</button>
-              <button class="cam-btn" data-cam="gateway">🖧 Zoom Gateway</button>
-              <button class="cam-btn" data-cam="sniffer">📡 Zoom Sniffer STL</button>
+              <button class="cam-btn" data-cam="gateway">🏮 Poste &amp; Gateway</button>
+              <button class="cam-btn" data-cam="sniffer">📡 Sniffer RPi5 (P2)</button>
             </div>
             <div style="margin-top: 8px;">
               <label class="switch-label" style="font-size: 11.5px;">
                 <input type="checkbox" id="chk-mr-vision" checked />
-                <span>Visión MR (Ondas RF &amp; Enlace Sniffer)</span>
+                <span>Visión MR (Ondas RF &amp; Enlace RPi5 → Poste)</span>
               </label>
             </div>
             <div class="controls-hint">
-              Clic + arrastrar: rotar · Rueda: zoom · <kbd>WASD</kbd>: caminar (modo Operario) · <kbd>E</kbd>: extraer Gateway · <kbd>G</kbd>: golpear mesa
+              Arrastrar: rotar · Rueda: zoom · <kbd>B</kbd>: bajar/subir Gateway del poste · <kbd>E</kbd>: extraer datos · <kbd>G</kbd>: golpe MPU6050
             </div>
           </div>
         </div>
       </div>
 
-      <!-- RIGHT HUD COLUMN: Hardware Sync (3 Gateway LEDs + Sniffer OLED + STA/LTA) -->
+      <!-- RIGHT HUD COLUMN: Hardware Sync (Outdoor Pole Gateway + Interior RPi5 Sniffer + Event Seismogram) -->
       <div class="hud-col-right">
         <div class="hud-card" id="card-hw-sync">
           <div class="hud-card-header">
-            <div class="hud-card-title">🔗 Sincronización Hardware (Mecánica 3)</div>
+            <div class="hud-card-title">🔗 Hardware: Sniffer RPi5 → Poste</div>
             <button class="collapse-btn" data-collapse="card-hw-sync">−</button>
           </div>
           <div class="hud-card-body">
-            <!-- Screen-less Gateway 3 LEDs -->
+            <!-- Screen-less Gateway on Outdoor Light Pole (3 LEDs) -->
             <div class="gateway-led-box">
               <div class="gateway-box-label">
-                <span>LPSBOX GATEWAY (SIN PANTALLA)</span>
-                <span id="gw-link-badge">RPi5 + ESP32</span>
+                <span>🏮 GATEWAY EXTERIOR (POSTE DE LUZ)</span>
+                <span id="gw-link-badge">ESP32 RX</span>
               </div>
               <div class="leds-row">
                 <div class="led-item">
                   <div class="led-bulb blue-on" id="led-blue"></div>
                   <div class="led-title">LED AZUL</div>
-                  <div class="led-sub">Sin info sísmica</div>
+                  <div class="led-sub">Sin alerta</div>
                 </div>
                 <div class="led-item">
                   <div class="led-bulb mini" id="led-blink"></div>
                   <div class="led-title">MINI LED</div>
-                  <div class="led-sub">Titila RX / 10s</div>
+                  <div class="led-sub">Titila RX</div>
                 </div>
                 <div class="led-item">
                   <div class="led-bulb" id="led-yellow"></div>
                   <div class="led-title">AMARILLO</div>
-                  <div class="led-sub">Hay info (t₀)</div>
+                  <div class="led-sub">Datos t₀ listos</div>
                 </div>
               </div>
             </div>
 
-            <!-- Sniffer OLED Mirror -->
+            <!-- Pole Mechanical Hoist Control -->
+            <div class="pole-hoist-box">
+              <div class="pole-hoist-row">
+                <span>Altura en Poste: <strong id="pole-height-val">4.65 m</strong></span>
+                <span class="pole-state-pill" id="pole-state-pill">⬆️ EN POSTE</span>
+              </div>
+              <button class="btn" id="btn-lower-pole" style="width: 100%; font-size: 12px;">
+                🪜 Bajar Gateway del Poste de Luz [B]
+              </button>
+            </div>
+
+            <!-- Sniffer RPi5 + MPU6050 OLED Mirror (Interior Piso 2) -->
             <div class="sniffer-oled state-normal" id="hud-sniffer-oled">
               <div class="oled-top">
-                <span>SNIFFER ESP32</span>
+                <span>SNIFFER RPi 5 · PISO 2</span>
                 <span id="oled-sta">STA/LTA: 1.0</span>
               </div>
               <div class="oled-main" id="oled-title">MONITOREO</div>
-              <div class="oled-sub" id="oled-sub">Escaneando Probe Requests (10s)</div>
+              <div class="oled-sub" id="oled-sub">Escaneando 4 pisos (ventana 10s)</div>
             </div>
 
-            <!-- Live MPU6050 Seismogram -->
+            <!-- MPU6050 Seismogram with Persistent Event Recording Mode! -->
             <div class="mini-seismo-wrap">
+              <div class="seismo-mode-bar">
+                <div class="seismo-pills">
+                  <button class="seismo-pill" id="btn-seismo-event" type="button" title="Ver el registro completo del terremoto o sismo ocurrido">
+                    📈 Evento Completo
+                  </button>
+                  <button class="seismo-pill active" id="btn-seismo-live" type="button" title="Ver flujo continuo en tiempo real">
+                    🔴 En Vivo
+                  </button>
+                </div>
+                <span style="font-family: var(--font-mono); font-size: 10px; color: var(--text-muted);" id="hud-seismo-tag">
+                  Tiempo real
+                </span>
+              </div>
               <div class="seismo-stats">
                 <span>MPU6050: <strong id="stat-accel">0.004g</strong></span>
                 <span>STA/LTA: <strong id="stat-stalta">1.00</strong> / 3.0</span>
               </div>
-              <canvas id="mini-seismo-canvas" width="280" height="58"></canvas>
+              <canvas id="mini-seismo-canvas" width="290" height="76"></canvas>
             </div>
 
             <div class="btn-row" style="flex-direction: column;">
@@ -300,7 +324,7 @@
     <!-- Bottom Event Log Ticker -->
     <div class="bottom-ticker" id="bottom-ticker">
       <div class="ticker-head">
-        <span>📡 BITÁCORA EN VIVO — RED DE SENSORES LPSBOX</span>
+        <span>📡 BITÁCORA EN VIVO — SNIFFER RPi5 (PISO 2) &amp; GATEWAY EN POSTE</span>
         <span id="ticker-clock">t = 0.0s</span>
       </div>
       <div class="ticker-log" id="ticker-log"></div>
@@ -311,9 +335,9 @@
       <div class="view-container">
         <div class="view-header">
           <div>
-            <h2>🖧 Terminal de Extracción LPSBOX Gateway (Raspberry Pi 5)</h2>
+            <h2>🖧 Terminal de Extracción en Campo — LPSBOX Gateway (Poste de Luz Exterior)</h2>
             <p>
-              Como el Gateway físico carece de pantalla por diseño industrial de bajo consumo y alta resistencia, el operario extrae aquí por USB-C / microSD / Red Local los paquetes enviados por el Sniffer antes del colapso de comunicaciones.
+              El <strong>Sniffer sobre Raspberry Pi 5 + MPU6050</strong> (dentro del Piso 2) transmite la captura pre-sismo al <strong>Gateway exterior sin pantalla</strong> ubicado en el poste de luz. Una vez bajado el Gateway a nivel de operario (<code>1.18 m</code>), inspecciona aquí las tramas por piso, el mapa multinivel y el registro completo de ondas sísmicas.
             </p>
           </div>
           <div class="btn-row" style="flex: 0 0 auto;">
@@ -321,24 +345,39 @@
           </div>
         </div>
 
+        <!-- Pole Lock Warning if Operator hasn't lowered the Gateway yet -->
+        <div class="pole-lock-banner" id="console-pole-lock">
+          <div>
+            <strong style="color: #fcd34d; display: block; margin-bottom: 3px;">
+              🏮 El LPSBOX Gateway aún está arriba en el Poste de Luz (4.65 m)
+            </strong>
+            <span style="font-size: 12.5px; color: var(--text-muted);">
+              Como operario de campo, primero debes bajar físicamente el Gateway del poste usando la polea de servicio para conectar el cable de extracción USB-C / leer la microSD.
+            </span>
+          </div>
+          <button class="btn btn-amber" id="btn-console-lower-pole" type="button" style="flex: 0 0 auto;">
+            🪜 Bajar Gateway del Poste Ahora (4.65 m → 1.18 m)
+          </button>
+        </div>
+
         <!-- Snapshot status banner -->
         <div class="snapshot-status-banner no-event" id="console-snapshot-banner">
           <div id="console-banner-text">
-            <strong>🔵 LED Azul Activo (Sin evento sísmico registrado):</strong> Mostrando buffer circular en vivo de los últimos 10s. Dispara un <em>Sismo Tranqui</em> o un <em>Terremoto Severo</em> para congelar la captura de emergencia <code>t₀</code>.
+            <strong>🔵 LED Azul Activo (Sin evento sísmico registrado):</strong> Mostrando buffer circular de los últimos 10 s recibido desde el Sniffer RPi5. Dispara un <em>Sismo Pequeño</em> o un <em>Terremoto Fuerte</em> para congelar la captura de emergencia <code>t₀</code>.
           </div>
           <div class="btn-row" style="flex: 0 0 auto;">
-            <button class="btn" id="btn-console-mild">🟡 Probar Sismo Tranqui</button>
-            <button class="btn btn-danger" id="btn-console-major">🔴 Probar Terremoto</button>
+            <button class="btn" id="btn-console-mild">🟡 Probar Sismo Pequeño</button>
+            <button class="btn btn-danger" id="btn-console-major">🔴 Probar Terremoto Fuerte</button>
           </div>
         </div>
 
         <div class="console-layout">
-          <!-- LEFT: Extracted Telemetry (Probes, RSSI Map, Seismogram/MQTT) -->
+          <!-- LEFT: Extracted Telemetry (Probes, 4-Story Cross-Section Map, Full Event Seismogram/MQTT) -->
           <div class="console-box">
             <div class="subtabs">
-              <button class="subtab-btn active" data-subtab="subtab-probes">📡 Tramas Sniffer (Ventana t₀ - 10s)</button>
-              <button class="subtab-btn" data-subtab="subtab-map">🗺️ Mapa Táctico RSSI (Ubicación Pre-Sismo)</button>
-              <button class="subtab-btn" data-subtab="subtab-mqtt">📈 Sismograma STA/LTA &amp; JSON MQTT</button>
+              <button class="subtab-btn active" data-subtab="subtab-probes">📡 Tramas Sniffer (Pisos 1–4)</button>
+              <button class="subtab-btn" data-subtab="subtab-map">🏢 Corte 4 Pisos RSSI (Pre-Sismo t₀)</button>
+              <button class="subtab-btn" data-subtab="subtab-mqtt">📈 Registro Completo de Ondas &amp; MQTT</button>
             </div>
 
             <!-- SUBTAB 1: PROBE REQUESTS -->
@@ -346,10 +385,10 @@
               <div class="filter-bar">
                 <label class="switch-label">
                   <input type="checkbox" id="chk-mac-filter" checked />
-                  <span>Aplicar Filtro Anti-MAC-Randomization (Ventana 10s OUI + Secuencia + RSSI)</span>
+                  <span>Aplicar Filtro Anti-MAC-Randomization (Ventana 10s en RPi 5: OUI + Secuencia + RSSI)</span>
                 </label>
                 <span style="font-size: 11.5px; color: var(--text-muted);">
-                  Descarta ráfagas de MACs aleatorias (bit LAA) del mismo teléfono
+                  Descarta ráfagas de MACs aleatorias (bit LAA) del mismo celular
                 </span>
               </div>
 
@@ -363,7 +402,7 @@
                   <strong class="amber" id="kpi-rand">0</strong>
                 </div>
                 <div class="kpi-card">
-                  <span>Dispositivos Únicos (t₀)</span>
+                  <span>Celulares Únicos (t₀)</span>
                   <strong class="green" id="kpi-unique">0</strong>
                 </div>
                 <div class="kpi-card">
@@ -382,8 +421,8 @@
                       <th>ID / Huella</th>
                       <th>MAC Capturada</th>
                       <th>Protocolo / Tipo</th>
-                      <th>RSSI Zonas (A / B / C / D)</th>
-                      <th>Zona Pre-Sismo (t₀)</th>
+                      <th>RSSI por Piso (P1 / P2 / P3 / P4)</th>
+                      <th>Piso Pre-Sismo (t₀)</th>
                       <th>Señal Post-Sismo</th>
                     </tr>
                   </thead>
@@ -392,37 +431,54 @@
               </div>
             </div>
 
-            <!-- SUBTAB 2: TACTICAL 2D RSSI FLOORPLAN -->
+            <!-- SUBTAB 2: TACTICAL 4-STORY ELEVATION CROSS-SECTION -->
             <div class="subtab-pane" id="subtab-map">
               <div class="filter-bar">
                 <span style="font-size: 12px;">
-                  <strong>Triangulación de celulares en <code>t₀</code> (Antes del Sismo):</strong> Haz clic sobre el plano para colocar marcadores de rescate USAR en las zonas donde detectes personas.
+                  <strong>Corte Estructural de 4 Pisos en <code>t₀</code> (Antes del Sismo):</strong> Haz clic en cualquier piso/sector del plano para fijar pines de búsqueda USAR.
                 </span>
                 <button class="btn" id="btn-clear-pins" style="flex: 0 0 auto; padding: 5px 10px;">Limpiar Pines</button>
               </div>
               <div class="tactical-map-wrap">
-                <canvas id="rssi-map-canvas" width="760" height="475"></canvas>
+                <canvas id="rssi-map-canvas" width="760" height="480"></canvas>
                 <div class="map-legend">
                   <span>🔵 Celular detectado antes del sismo (<code>t₀</code>)</span>
-                  <span>🟢 Señal evacuada al exterior post-sismo</span>
-                  <span>🔴 Señal perdida / persona atrapada en interior</span>
-                  <span>🎯 Pin de rescate marcado por el Operario</span>
+                  <span>🟢 Evacuado a salvo al exterior</span>
+                  <span>🔴 Señal perdida / atrapado en piso colapsado</span>
+                  <span>🎯 Pin USAR marcado por el Operario</span>
                 </div>
               </div>
             </div>
 
-            <!-- SUBTAB 3: STA/LTA SEISMOGRAM & MQTT PAYLOAD -->
+            <!-- SUBTAB 3: FULL RECORDED EVENT SEISMOGRAM & MQTT PAYLOAD -->
             <div class="subtab-pane" id="subtab-mqtt">
-              <p style="font-size: 12.5px; color: var(--text-muted); margin-bottom: 8px;">
-                Curva de relación <strong>STA/LTA (Short-Term / Long-Term Average)</strong> calculada sobre el acelerómetro <strong>MPU6050</strong> y trama JSON recibida por el broker MQTT de la <strong>Raspberry Pi 5</strong>:
-              </p>
-              <div class="mini-seismo-wrap" style="margin-bottom: 12px;">
-                <canvas id="full-seismo-canvas" width="700" height="140" style="width:100%; height:140px;"></canvas>
+              <div class="filter-bar" style="margin-bottom: 10px;">
+                <div>
+                  <strong style="font-size: 13px; color: #f8fafc;">
+                    Sismógrafo Digital MPU6050 (Raspberry Pi 5 — Registro Persistente)
+                  </strong>
+                  <div style="font-size: 11.5px; color: var(--text-muted);" id="seismo-hover-readout">
+                    Pasa el cursor sobre la gráfica para inspeccionar aceleración (g) y relación STA/LTA segundo a segundo.
+                  </div>
+                </div>
+                <div class="seismo-pills">
+                  <button class="seismo-pill active" id="btn-console-seismo-event" type="button">
+                    📈 Registro Completo del Evento
+                  </button>
+                  <button class="seismo-pill" id="btn-console-seismo-live" type="button">
+                    🔴 Señal en Vivo
+                  </button>
+                </div>
               </div>
+
+              <div class="mini-seismo-wrap" style="margin-bottom: 12px; padding: 10px;">
+                <canvas id="full-seismo-canvas" width="720" height="215" style="width:100%; height:215px; cursor: crosshair;"></canvas>
+              </div>
+
               <div class="code-block-wrap">
                 <div class="code-block-head">
-                  <span>Topic MQTT: lpsbox/gateway/snapshot_t0</span>
-                  <span>Raspberry Pi 5 · Mosquitto Broker</span>
+                  <span>Trama Transmitida: Sniffer RPi 5 (Piso 2) ──► Gateway Poste Exterior</span>
+                  <span>Topic: lpsbox/sniffer_rpi5/snapshot_t0</span>
                 </div>
                 <pre class="code-pre" id="mqtt-json-preview"></pre>
               </div>
@@ -435,47 +491,47 @@
               📋 Informe Oficial del Operario de Emergencia
             </h3>
             <p style="font-size: 12.5px; color: var(--text-muted); margin-bottom: 14px;">
-              Con base en los datos enviados por el <strong>Sniffer al Gateway</strong>, indica cuántas personas había en el edificio y en qué zonas se ubicaban (con su celular) <strong>justo antes del sismo (<code>t₀</code>)</strong>:
+              Con los datos extraídos del <strong>Gateway bajado del poste de luz</strong>, reporta cuántas personas había en el edificio de 4 pisos y en qué piso se encontraban (con su celular) <strong>justo antes del sismo (<code>t₀</code>)</strong>:
             </p>
 
             <form class="report-form" id="operator-report-form">
               <div class="form-field">
                 <label for="inp-total">1. ¿Cuántas personas (celulares únicos) había en TOTAL antes del sismo?</label>
-                <small>Recuerda descontar las MACs aleatorias repetidas en la ventana de 10 segundos.</small>
+                <small>Descuenta las ráfagas de MACs aleatorias repetidas en la ventana de 10 s.</small>
                 <input type="number" class="num-input" id="inp-total" min="0" max="60" value="0" required />
               </div>
 
               <div class="form-field">
-                <label>2. Ubicación por Zonas ANTES del sismo (<code>t₀</code>):</label>
-                <small id="zone-sum-helper">Suma actual ingresada por zonas: 0 personas</small>
+                <label>2. Ubicación por Pisos ANTES del sismo (<code>t₀</code>):</label>
+                <small id="zone-sum-helper">Suma actual ingresada por pisos: 0 personas</small>
                 <div class="zones-input-grid">
-                  <div class="zone-input-card" style="border-left: 3px solid #38bdf8;">
-                    <span>Zona A — Laboratorio</span>
+                  <div class="zone-input-card" style="border-left: 3px solid #10b981;">
+                    <span>Piso 1 — Cafetería / Lobby</span>
                     <input type="number" class="num-input zone-inp" id="inp-zone-a" min="0" max="40" value="0" />
                   </div>
-                  <div class="zone-input-card" style="border-left: 3px solid #a855f7;">
-                    <span>Zona B — Servidores/Ofic.</span>
+                  <div class="zone-input-card" style="border-left: 3px solid #38bdf8;">
+                    <span>Piso 2 — Lab / Sniffer RPi5</span>
                     <input type="number" class="num-input zone-inp" id="inp-zone-b" min="0" max="40" value="0" />
                   </div>
-                  <div class="zone-input-card" style="border-left: 3px solid #f59e0b;">
-                    <span>Zona C — Auditorio</span>
+                  <div class="zone-input-card" style="border-left: 3px solid #a855f7;">
+                    <span>Piso 3 — Servidores</span>
                     <input type="number" class="num-input zone-inp" id="inp-zone-c" min="0" max="40" value="0" />
                   </div>
-                  <div class="zone-input-card" style="border-left: 3px solid #10b981;">
-                    <span>Zona D — Cafetería</span>
+                  <div class="zone-input-card" style="border-left: 3px solid #f59e0b;">
+                    <span>Piso 4 — Auditorio</span>
                     <input type="number" class="num-input zone-inp" id="inp-zone-d" min="0" max="40" value="0" />
                   </div>
                 </div>
               </div>
 
               <div class="form-field">
-                <label for="inp-priority-zone">3. Zona Prioritaria de Búsqueda y Rescate (USAR):</label>
-                <small>Selecciona el sector con mayor ocupación previa o señales perdidas tras el sismo.</small>
+                <label for="inp-priority-zone">3. Piso Prioritario de Búsqueda y Rescate (USAR):</label>
+                <small>Selecciona el piso con personas atrapadas / colapso parcial o mayor ocupación previa.</small>
                 <select class="select-input" id="inp-priority-zone">
-                  <option value="A">Zona A — Laboratorio de Electrónica</option>
-                  <option value="B">Zona B — Sala de Servidores y Oficinas</option>
-                  <option value="C">Zona C — Auditorio Principal</option>
-                  <option value="D">Zona D — Cafetería y Pasillo Central</option>
+                  <option value="A">Piso 1 — Lobby y Cafetería</option>
+                  <option value="B">Piso 2 — Laboratorio y Nodo Sniffer RPi5</option>
+                  <option value="C">Piso 3 — Sala de Servidores y Telecom</option>
+                  <option value="D" selected>Piso 4 — Auditorio y Sala de Proyectos</option>
                 </select>
               </div>
 
@@ -491,7 +547,7 @@
               </div>
               <div id="res-feedback" style="font-size: 12.5px; line-height: 1.5; margin-bottom: 10px;"></div>
               <button class="btn btn-amber" id="btn-view-hologram" style="width: 100%;">
-                👁️ Ver Hologramas 3D Pre-Sismo (t₀) en el Edificio
+                👁️ Ver Hologramas 3D Pre-Sismo (t₀) en los 4 Pisos
               </button>
             </div>
           </div>
@@ -504,9 +560,9 @@
       <div class="view-container">
         <div class="view-header">
           <div>
-            <h2>📘 Diseño de Juego MR &amp; Arquitectura Técnica (Raspberry Pi 5 + ESP32 → Motor XR)</h2>
+            <h2>📘 Diseño de Juego MR &amp; Arquitectura Técnica (Sniffer RPi 5 Interior → Gateway en Poste Exterior)</h2>
             <p>
-              Documento integral de diseño (Game Pitch, Core Gameplay Loop, Sincronización Físico-Virtual de Hardware y Puente Python/MQTT hacia Unity, Godot y WebXR).
+              Documento integral de diseño: Game Pitch, Core Gameplay Loop en edificio multinivel, mecánica física de descenso en poste de luz y puente Python/MQTT desde la <strong>Raspberry Pi 5</strong> hacia Unity, Godot y WebXR.
             </p>
           </div>
           <button class="btn" data-goto-sim style="flex: 0 0 auto;">← Volver al Simulador 3D</button>
@@ -514,13 +570,13 @@
 
         <!-- Live Hardware Bridge Card -->
         <div class="doc-card" style="margin-bottom: 18px; border-color: var(--border-bright);">
-          <h3>🔌 Puente en Vivo con Raspberry Pi 5 Física (WebSocket / MQTT-over-WSS)</h3>
+          <h3>🔌 Puente en Vivo con el Sniffer Raspberry Pi 5 (WebSocket / MQTT-over-WSS)</h3>
           <p style="margin-bottom: 10px;">
-            Este simulador en GitHub Pages puede recibir telemetría real desde tu <strong>Raspberry Pi 5</strong> ejecutando el script incluido en el repositorio (<code>python_rpi5_bridge/rpi5_lpsbox_bridge.py</code>). Al conectar, el conteo real de celulares cercanos y los golpes/vibraciones del <strong>MPU6050</strong> controlan directamente la escena 3D/MR:
+            Este simulador en GitHub Pages puede conectarse en tiempo real a tu <strong>Raspberry Pi 5</strong> ejecutando el servicio del Sniffer + detector sísmico (<code>python_rpi5_bridge/rpi5_lpsbox_bridge.py</code>). Al conectar, el conteo real de smartphones y las vibraciones del <strong>MPU6050</strong> gobiernan directamente el edificio de 4 pisos y el Gateway del poste:
           </p>
           <div class="btn-row" style="align-items: center;">
             <input type="text" class="text-input" id="ws-url-input" value="ws://localhost:8765" style="max-width: 320px; font-size: 12.5px;" />
-            <button class="btn btn-primary" id="btn-ws-connect" style="flex: 0 0 auto;">Conectar a Raspberry Pi 5</button>
+            <button class="btn btn-primary" id="btn-ws-connect" style="flex: 0 0 auto;">Conectar a Sniffer RPi 5</button>
             <span id="ws-status" style="font-family: var(--font-mono); font-size: 12px; color: var(--text-muted);">
               Estado: Simulación autónoma interna activa
             </span>
@@ -531,78 +587,75 @@
           <div class="doc-card">
             <h3>1. Game Pitch: «LPSBOX: Caja Negra Sísmica»</h3>
             <p>
-              <strong>Concepto Central:</strong> Durante un terremoto severo, la energía eléctrica y las redes celulares colapsan en segundos, dejando a los equipos de rescate a ciegas sobre cuántas personas había dentro de una edificación y en qué salas se encontraban. <strong>LPSBOX: Operador de Emergencia MR</strong> convierte la caja física del Gateway IoT (impresa en 3D, minimalista y sin pantalla, gobernada por una <strong>Raspberry Pi 5</strong> y un nodo <strong>ESP32 + MPU6050</strong>) en el artefacto central sobre el escritorio del jugador en Realidad Mixta (MR) y Realidad Virtual (VR).
+              <strong>Concepto Central:</strong> Cuando un terremoto sacude un edificio de varios pisos, el colapso de estanterías, plafones y energía eléctrica deja incomunicadas a las personas atrapadas en segundos. <strong>LPSBOX</strong> divide estratégicamente la supervivencia de los datos: dentro del edificio (Piso 2), el <strong>Nodo Sniffer motorizado por una Raspberry Pi 5 junto al acelerómetro MPU6050</strong> ejecuta el algoritmo sísmico <code>STA/LTA</code>, activa la alarma local en pantalla completa y transmite de inmediato la fotografía de celulares <code>t₀</code> hacia el exterior.
             </p>
             <p style="margin-top: 8px;">
-              El jugador asume el rol del <strong>Operario de Respuesta Sísmica</strong>: controla y enfrenta escenarios desde micro-sismos preventivos (<em>«sismo tranqui»</em>) hasta terremotos destructivos, observa el estado físico de los <strong>3 LEDs del Gateway</strong>, extrae la última fotografía radioeléctrica <code>t₀</code> enviada por el Sniffer antes del sismo y determina con exactitud cuántas personas había y dónde se ubicaban con sus teléfonos móviles para dirigir el rescate.
+              Afuera, a salvo de cualquier derrumbe a <strong>4.65 metros de altura en un poste de alumbrado público</strong>, el <strong>LPSBOX Gateway</strong> (caja minimalista sin pantalla con 3 LEDs de estado) almacena esa caja negra. El jugador encarna al <strong>Operario de Emergencia</strong>: llega al poste, verifica el <strong>LED Amarillo</strong>, acciona el malacate para <strong>bajar el Gateway del poste</strong>, extrae los registros por USB-C y determina cuántas personas había en cada uno de los 4 pisos antes del sismo.
             </p>
           </div>
 
           <div class="doc-card">
-            <h3>2. Core Gameplay Loop &amp; Mecánicas IoT</h3>
+            <h3>2. Core Gameplay Loop &amp; Mecánicas Físico-Virtuales</h3>
             <ol>
               <li>
-                <strong>Mecánica 1 — Crowd Data (Spawns &amp; Huella Pre-Sismo):</strong> El Sniffer pasivo captura tramas <em>WiFi 802.11 / BLE Probe Request</em> en ventanas de 10 s filtrando la aleatorización de MAC (bit LAA + OUI + RSSI). En el espacio MR, mayor densidad real de smartphones genera mayor población de agentes/nodos digitales en las salas y alimenta el mapa de calor previo al sismo.
+                <strong>Mecánica 1 — Crowd Sniffer en RPi 5 (4 Pisos):</strong> La Raspberry Pi 5 captura tramas <em>WiFi 802.11 / BLE Probe Request</em> en ventanas deslizantes de 10 s, filtra MACs aleatorias (bit LAA + huella de secuencia + atenuación RSSI de 12.5 dB por losa de concreto) y ubica cada celular entre los Pisos 1 a 4.
               </li>
               <li>
-                <strong>Mecánica 2 — Seismic Data (Triggers STA/LTA):</strong> El acelerómetro <strong>MPU6050</strong> ejecuta el algoritmo sísmico <code>STA/LTA</code> en tiempo real. Un golpe físico en la mesa dispara una onda electromagnética/sísmica de escaneo en MR; un sismo leve activa protocolos preventivos; y un terremoto dispara la sirena del Sniffer, congela el snapshot crítico <code>t₀</code> y desencadena colapsos estructurales en el edificio virtual.
+                <strong>Mecánica 2 — Disparo Sísmico MPU6050 &amp; Física Estructural:</strong> El sensor <code>MPU6050</code> conectado por I2C a la Raspberry Pi 5 calcula <code>STA/LTA</code> en vivo y graba todo el sismograma del evento (Onda P, Onda S, réplica y coda) para consulta posterior. En el edificio, los pisos superiores experimentan deriva sísmica amplificada, caída de lámparas, vuelco de estanterías y reacciones diferenciadas de los NPCs con diálogos en tiempo real.
               </li>
               <li>
-                <strong>Mecánica 3 — Hardware Sync (Puente de 3 LEDs):</strong> La interfaz MR/VR carece de menús artificiales gratuitos: el operario lee los mismos <strong>3 LEDs físicos</strong> de la caja negra (<strong>Azul</strong> = sin evento; <strong>Mini LED titilante</strong> = procesando ráfagas de 10 s; <strong>Amarillo</strong> = datos pre-sismo almacenados en microSD listos para extracción USB-C).
+                <strong>Mecánica 3 — Descenso del Gateway en Poste &amp; 3 LEDs:</strong> El Gateway exterior sincroniza sus 3 LEDs físicos (<strong>Azul</strong> sin evento, <strong>Mini LED</strong> titilando en RX, <strong>Amarillo</strong> datos <code>t₀</code> listos) y exige la maniobra física de bajarlo del poste de luz antes de extraer la información.
               </li>
             </ol>
           </div>
         </div>
 
-        <h3 style="margin-bottom: 10px; color: var(--cyan);">3. Arquitectura Técnica: Del Sensor Físico al Motor MR (Unity / Godot / WebXR)</h3>
-        <div class="arch-diagram">[NODO SNIFFER ESP32 + MPU6050]                     [CAJA FÍSICA GATEWAY: RASPBERRY PI 5 + ESP32 RX]
- ├─ WiFi Promiscuous / BLE Scan (ventana 10s)       ├─ Recepción ESP-NOW / UART (115200 bps)
- ├─ Filtro Anti-MAC-Randomization (LAA + RSSI) ───► ├─ Algoritmo STA/LTA + Persistencia SQLite / microSD
- └─ Acelerómetro I2C MPU6050 (200 Hz, ax,ay,az)     ├─ Control GPIO de los 3 LEDs Físicos (Azul/Blink/Amarillo)
-                                                    └─ Broker Mosquitto Local:
-                                                         • TCP 1883  ──► Unity (M2Mqtt / Meta XR SDK) o Godot 4
-                                                         • WSS 9001 / WS 8765 ──► WebXR en GitHub Pages (Three.js)</div>
+        <h3 style="margin-bottom: 10px; color: var(--cyan);">3. Arquitectura Técnica: Sniffer RPi 5 (Interior) → Gateway Poste (Exterior) → Motor MR</h3>
+        <div class="arch-diagram">[INTERIOR EDIFICIO PISO 2: SNIFFER RASPBERRY PI 5 + MPU6050]        [EXTERIOR EN POSTE DE LUZ (4.65 m): LPSBOX GATEWAY]
+ ├─ Captura pasiva WiFi/BLE + Filtro MAC Aleatoria (ventana 10s)     ├─ Receptor inalámbrico ESP32 (LoRa / ESP-NOW LR)
+ ├─ Acelerómetro I2C MPU6050 (200 Hz) + Algoritmo STA/LTA            ├─ Almacenamiento seguro en microSD fuera de zona de colapso
+ ├─ Registro completo de ondas sísmicas + Pantalla OLED / Alarma ──► ├─ 3 LEDs Físicos (Azul / Mini Blink / Amarillo)
+ └─ Broker MQTT Mosquitto / WebSocket en RPi 5:                      └─ Polea de descenso a 1.18 m ──► Extracción USB-C por Operario
+      • TCP 1883  ──► Unity (OpenXR / Meta Quest MR) o Godot 4            └─ Informe USAR de ocupación pre-sismo (Pisos 1–4)
+      • WS  8765  ──► Simulador WebXR en GitHub Pages (Three.js)</div>
 
         <div class="docs-grid">
           <div class="doc-card">
-            <h3>🐍 Nodo Central Python en Raspberry Pi 5</h3>
-            <p>Lee el stream del ESP32 + MPU6050, ejecuta el filtro STA/LTA y de MACs aleatorias cada 10 s, sincroniza los 3 LEDs por GPIO y publica en MQTT/WebSockets (archivo completo en <code>python_rpi5_bridge/rpi5_lpsbox_bridge.py</code>):</p>
+            <h3>🐍 Servicio Sniffer + Detector Sísmico en Raspberry Pi 5</h3>
+            <p>Ejecutándose dentro del Sniffer (<code>modelo3d.stl</code>), la Raspberry Pi 5 procesa el MPU6050 por I2C, filtra MACs aleatorias cada 10 s, guarda la onda sísmica completa y transmite al Gateway del poste (ver <code>python_rpi5_bridge/rpi5_lpsbox_bridge.py</code>):</p>
             <div class="code-block-wrap">
               <div class="code-block-head">
-                <span>rpi5_lpsbox_bridge.py (Extracto clave)</span>
+                <span>rpi5_lpsbox_bridge.py (Sniffer RPi 5 + MPU6050)</span>
                 <span>Python 3.11 · RPi 5</span>
               </div>
               <pre class="code-pre">import json, time, math
 import paho.mqtt.client as mqtt
-from gpiozero import LED
-
-led_blue   = LED(17) # Sin info
-led_blink  = LED(27) # Titila recibiendo
-led_yellow = LED(22) # Hay info pre-sismo
 
 def is_randomized_mac(mac: str) -> bool:
     # Bit Locally Administered (2, 6, A, E en segundo nibble)
     return mac[1].upper() in ('2', '6', 'A', 'E')
 
-class StaLtaDetector:
+class StaLtaRecorder:
     def __init__(self, n_sta=20, n_lta=400, threshold=3.0):
         self.a_sta, self.a_lta = 1.0/n_sta, 1.0/n_lta
-        self.sta = self.lta = 1e-5
+        self.sta = self.lta = 3.2e-5
         self.threshold = threshold
+        self.event_waveform = []  # Guarda todo el evento sísmico
 
-    def update(self, ax, ay, az):
+    def update(self, ax, ay, az, t_rel):
         dyn_g = abs(math.sqrt(ax*ax + ay*ay + az*az) - 1.0)
         e = dyn_g * dyn_g + 1e-6
         self.sta += self.a_sta * (e - self.sta)
         self.lta += self.a_lta * (e - self.lta)
         ratio = math.sqrt(self.sta / max(self.lta, 1e-7))
+        self.event_waveform.append({"t": round(t_rel, 2), "g": dyn_g, "r": ratio})
         return dyn_g, ratio, ratio >= self.threshold</pre>
             </div>
           </div>
 
           <div class="doc-card">
             <h3>🎮 Suscriptor C# Unity (Meta Quest MR) / Godot 4</h3>
-            <p>En Unity (OpenXR + Meta Passthrough) o Godot 4 XR, el cliente MQTT escucha los tópicos de la Raspberry Pi 5 en la red local con latencia menor a 15 ms:</p>
+            <p>En Unity (OpenXR + Passthrough) o Godot 4 XR, el motor recibe tanto la telemetría del Sniffer RPi 5 como el estado del Gateway en el poste exterior:</p>
             <div class="code-block-wrap">
               <div class="code-block-head">
                 <span>LPSBoxMRController.cs (Unity C# + MQTT)</span>
@@ -611,19 +664,17 @@ class StaLtaDetector:
               <pre class="code-pre">void OnMqttMessage(string topic, string json) {
   var data = JsonUtility.FromJson&lt;LPSPayload&gt;(json);
 
-  // Mecánica 1: Spawns según conteo filtrado 10s
-  crowdSpawner.SyncEntityCount(data.filtered_unique_phones);
+  // Mecánica 1: Spawns por piso (P1..P4) según conteo filtrado 10s
+  buildingSpawner.SyncFloors(data.floor_counts);
 
-  // Mecánica 2: Disparo sísmico / Golpe físico MPU6050
+  // Mecánica 2: Disparo sísmico MPU6050 + caída física de objetos
   if (data.sta_lta &gt;= 3.0f) {
-    mrShockwave.TriggerEMP(gatewayAnchor.position, data.accel_g);
-    if (data.accel_g &gt; 0.35f) buildingSim.TriggerCollapse();
+    propPhysics.TriggerSeismicShake(data.accel_g);
+    seismogramUI.RenderFullEvent(data.event_waveform);
   }
 
-  // Mecánica 3: Sincronía exacta con los 3 LEDs físicos
-  uiLedBlue.SetActive(data.leds.blue);
-  uiLedBlink.SetActive(data.leds.blink);
-  uiLedYellow.SetActive(data.leds.yellow);
+  // Mecánica 3: Sincronía con los 3 LEDs del Gateway en el poste
+  poleGateway.SetLeds(data.leds.blue, data.leds.blink, data.leds.yellow);
 }</pre>
             </div>
           </div>
@@ -636,9 +687,9 @@ class StaLtaDetector:
       <div class="view-container">
         <div class="view-header">
           <div>
-            <h2>🔧 Galería de Diseño Industrial &amp; Modelo 3D STL (Partes 2, 3 y 4)</h2>
+            <h2>🔧 Galería de Diseño Industrial &amp; Modelo 3D STL (Sniffer RPi 5 &amp; Gateway Exterior)</h2>
             <p>
-              Evolución completa del hardware del sistema <strong>LPSBOX</strong> contenida en el repositorio: desde los bocetos conceptuales hechos a mano hasta el rediseño asistido por IA y la malla 3D imprimible (<code>modelo3d.stl</code>).
+              Evolución completa del hardware del sistema <strong>LPSBOX</strong>: bocetos originales, rediseño industrial asistido por IA y visor CAD 3D interactivo de <code>modelo3d.stl</code> con pantalla frontal calibrada al 100% del bisel.
             </p>
           </div>
           <button class="btn" data-goto-sim style="flex: 0 0 auto;">← Volver al Simulador 3D</button>
@@ -655,7 +706,7 @@ class StaLtaDetector:
                 <button class="icon-btn" id="btn-cad-reset">🎯 Centrar Vista</button>
               </div>
               <span class="icon-btn" style="cursor: default; font-family: var(--font-mono);">
-                modelo3d.stl · 50,000 triángulos
+                modelo3d.stl · Sniffer RPi5 · 50,000 tris
               </span>
             </div>
           </div>
@@ -664,10 +715,10 @@ class StaLtaDetector:
             <h3>📐 Especificaciones Físicas del Sistema LPSBOX</h3>
             <ul>
               <li>
-                <strong>Archivo CAD 3D (<code>modelo3d.stl</code>):</strong> Carcasa industrial con antena superior derecha, interruptor basculante de encendido/apagado superior izquierdo, bisel frontal para pantalla de estado (<code>ALERTA / Enviando datos</code>), 3 botones de control manual, rejilla acústica para bocina de alarma/voz y bahía frontal de puertos USB/almacenamiento.
+                <strong>Nodo Sniffer Interior (<code>modelo3d.stl</code> — Raspberry Pi 5 + MPU6050):</strong> Instalado dentro del edificio (Piso 2). Integra la Raspberry Pi 5 (con bahía frontal de puertos USB y microSD visible en la esquina inferior derecha), acelerómetro sísmico <code>MPU6050</code>, antena superior derecha, interruptor ON/OFF superior izquierdo, pantalla OLED frontal de cobertura completa (<code>ALERTA / Enviando datos</code>), 3 botones de control y bocina de alarma/voz.
               </li>
               <li>
-                <strong>LPSBOX Gateway (Sin pantalla):</strong> Carcasa minimalista en ABS gris oscuro mate con ensamble <em>snap-fit</em> de 2 piezas, antena SMA superior izquierda, bahía lateral de alimentación USB-C, ranura <code>microSD + USB-C Program/Extraction</code> y código visual de <strong>3 indicadores LED</strong> (Azul: sin datos, Mini LED titilante: recepción activa, Amarillo: información sísmica lista).
+                <strong>LPSBOX Gateway Exterior (Montado en Poste de Luz):</strong> Carcasa minimalista sin pantalla en ABS gris oscuro mate instalada en un poste de alumbrado exterior con sistema de descenso por polea. Cuenta con receptor inalámbrico ESP32, ranura <code>microSD + USB-C</code> para extracción en campo y <strong>3 indicadores LED de alta visibilidad</strong> (Azul: sin datos, Mini LED titilante: recepción activa, Amarillo: información sísmica <code>t₀</code> lista).
               </li>
               <li>
                 Haz clic en cualquiera de las imágenes inferiores para ampliarla a pantalla completa.
@@ -681,7 +732,7 @@ class StaLtaDetector:
           <article class="gallery-item">
             <img src="./bozeto%20del%20gateway.jpg" alt="Boceto original a mano del LPSBOX Gateway" loading="lazy" />
             <div class="gallery-caption">
-              <h4>Parte 2A — Boceto Original del Gateway</h4>
+              <h4>Parte 2A — Boceto Original del Gateway (Exterior)</h4>
               <p>Diseño conceptual sin pantalla especificando el Mini LED que titila recibiendo info, LED Amarillo (hay información), LED Azul (no hay info) y puertos de extracción/carga.</p>
             </div>
           </article>
@@ -690,23 +741,23 @@ class StaLtaDetector:
             <img src="./lpsbox_gateway_v.png" alt="Render industrial IA del LPSBOX Gateway" loading="lazy" />
             <div class="gallery-caption">
               <h4>Parte 3A — Rediseño Industrial IA: LPSBOX Gateway</h4>
-              <p>Render de producto en carcasa ABS gris mate sin pantallas, con indicadores LED superiores/inferiores, puertos microSD y USB-C integrados.</p>
+              <p>Unidad receptora resistente montada en el poste de luz exterior, lista para ser descendida por el operario tras una emergencia sísmica.</p>
             </div>
           </article>
 
           <article class="gallery-item">
             <img src="./bozeto%20del%20sniffer.jpg" alt="Boceto original a mano del Nodo Sniffer" loading="lazy" />
             <div class="gallery-caption">
-              <h4>Parte 2B — Boceto Original del Sniffer</h4>
-              <p>Especificación de antena RF, switch de encendido, pantalla «ALERTA / Enviando datos», 3 botones manuales, bocina con alarma/voz y puertos de datos.</p>
+              <h4>Parte 2B — Boceto Original del Sniffer (Interior)</h4>
+              <p>Especificación de antena RF, switch de encendido, pantalla «ALERTA / Enviando datos», 3 botones manuales, bocina con alarma/voz y puertos de la Raspberry Pi 5.</p>
             </div>
           </article>
 
           <article class="gallery-item">
             <img src="./bozeto%20del%20sniffer%20redise%C3%B1o%20IA.jpg" alt="Render industrial IA del Sniffer" loading="lazy" />
             <div class="gallery-caption">
-              <h4>Parte 3B — Rediseño Industrial IA: Nodo Sniffer</h4>
-              <p>Render fotorrealista que sirvió de base para generar la geometría tridimensional <code>modelo3d.stl</code> integrada dentro del simulador VR/MR.</p>
+              <h4>Parte 3B — Rediseño Industrial IA: Nodo Sniffer RPi 5</h4>
+              <p>Render de producto que dio origen a <code>modelo3d.stl</code>, alojando la Raspberry Pi 5, el sensor sísmico MPU6050 y la pantalla frontal completa.</p>
             </div>
           </article>
 
@@ -714,7 +765,7 @@ class StaLtaDetector:
             <img src="./usodeLMArena.jpg" alt="Proceso de diseño asistido por IA en Arena" loading="lazy" />
             <div class="gallery-caption">
               <h4>Parte 3C — Flujo de Ingeniería Asistida en Arena</h4>
-              <p>Documentación del prompt de diseño industrial empleado para transformar el boceto en papel en el prototipo de manufactura aditiva.</p>
+              <p>Documentación del flujo de diseño industrial empleado para llevar los bocetos en papel al modelo imprimible 3D.</p>
             </div>
           </article>
         </div>
@@ -722,11 +773,12 @@ class StaLtaDetector:
     </section>
   </main>
 
-  <!-- Image Lightbox -->
+  <!-- Image Lightbox Modal -->
   <div class="lightbox" id="img-lightbox">
     <img id="lightbox-img" src="" alt="Vista ampliada" />
   </div>
 
+  <!-- Main Application Entry Point -->
   <script type="module" src="./js/main.js"></script>
 </body>
 </html>
