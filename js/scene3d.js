@@ -1,9 +1,22 @@
-// js/scene3d.js — Escena 3D / WebXR (VR & MR) para LPSBOX System (Three.js + STLLoader)
+// js/scene3d.js — Escena 3D / WebXR v2 para LPSBOX System:
+// - Edificio arquitectónico de 4 pisos en corte (dollhouse) + escalera de emergencia acristalada + azotea
+// - Nodo Sniffer (modelo3d.stl + Raspberry Pi 5 + MPU6050) con pantalla OLED calibrada al 100% del marco
+// - Poste de Luz exterior con malacate/polea para bajar el LPSBOX Gateway (3 LEDs físicos) y extraer por USB-C
+// - NPCs articulados con vestimenta variada, posturas reactivas y globos de diálogo en vivo
+// - Sistema físico de objetos que oscilan, vuelcan y caen (lámparas, estantes, monitores, cajas, cuadros, plafones, chispas y polvo)
 
 import * as THREE from '../vendor/three/three.module.min.js';
 import { OrbitControls } from '../vendor/three/OrbitControls.js';
 import { STLLoader } from '../vendor/three/STLLoader.js';
-import { ZONES, ASSEMBLY_POINT, GATEWAY_WORLD_POS, SNIFFER_WORLD_POS } from './simulation.js';
+import {
+  FLOOR_HEIGHT,
+  ZONES,
+  ASSEMBLY_POINT,
+  POLE_WORLD_POS,
+  GATEWAY_HEIGHT_UP,
+  GATEWAY_HEIGHT_DOWN,
+  SNIFFER_WORLD_POS
+} from './simulation.js';
 
 let cachedStlGeometry = null;
 const stlCallbacks = [];
@@ -19,19 +32,21 @@ export function loadSharedStlGeometry(onLoaded, onError) {
   stlLoadingStarted = true;
 
   const loader = new STLLoader();
-  loader.load(
-    './modelo3d.stl',
-    (geometry) => {
+  fetch('./modelo3d.stl')
+    .then((res) => {
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.arrayBuffer();
+    })
+    .then((buffer) => {
+      const geometry = loader.parse(buffer);
       geometry.computeVertexNormals();
       geometry.computeBoundingBox();
       cachedStlGeometry = geometry;
       stlCallbacks.forEach((cb) => cb.onLoaded && cb.onLoaded(geometry));
-    },
-    undefined,
-    (err) => {
+    })
+    .catch((err) => {
       stlCallbacks.forEach((cb) => cb.onError && cb.onError(err));
-    }
-  );
+    });
 }
 
 function drawRoundRectPath(ctx, x, y, w, h, r) {
@@ -49,34 +64,144 @@ function drawRoundRectPath(ctx, x, y, w, h, r) {
   ctx.closePath();
 }
 
-function makeLabelTexture(title, subtitle, accentColor = '#38bdf8', bgAlpha = 0.82) {
+function makeLabelTexture(title, subtitle, borderColor = '#38bdf8', bgAlpha = 0.88) {
   const canvas = document.createElement('canvas');
   canvas.width = 512;
-  canvas.height = 160;
+  canvas.height = 148;
   const ctx = canvas.getContext('2d');
 
-  ctx.fillStyle = `rgba(8, 14, 25, ${bgAlpha})`;
-  drawRoundRectPath(ctx, 6, 6, 500, 148, 20);
+  ctx.fillStyle = `rgba(8, 14, 26, ${bgAlpha})`;
+  drawRoundRectPath(ctx, 6, 6, 500, 136, 18);
   ctx.fill();
 
-  ctx.lineWidth = 5;
-  ctx.strokeStyle = accentColor;
+  ctx.lineWidth = 4;
+  ctx.strokeStyle = borderColor;
+  drawRoundRectPath(ctx, 6, 6, 500, 136, 18);
   ctx.stroke();
 
-  ctx.fillStyle = accentColor;
-  ctx.font = 'bold 36px monospace';
+  ctx.fillStyle = '#f8fafc';
+  ctx.font = 'bold 31px system-ui, -apple-system, sans-serif';
   ctx.textAlign = 'center';
-  ctx.fillText(title, 256, 68);
+  ctx.fillText(title, 256, 62);
 
-  if (subtitle) {
-    ctx.fillStyle = '#e2e8f0';
-    ctx.font = '600 25px sans-serif';
-    ctx.fillText(subtitle, 256, 115);
+  ctx.fillStyle = borderColor;
+  ctx.font = '600 22px monospace';
+  ctx.fillText(subtitle, 256, 108);
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+function createSkyTexture() {
+  const canvas = document.createElement('canvas');
+  canvas.width = 512;
+  canvas.height = 256;
+  const ctx = canvas.getContext('2d');
+
+  const grad = ctx.createLinearGradient(0, 0, 0, 256);
+  grad.addColorStop(0.0, '#040814');
+  grad.addColorStop(0.42, '#0b1730');
+  grad.addColorStop(0.72, '#162b4d');
+  grad.addColorStop(0.9, '#1e3a5f');
+  grad.addColorStop(1.0, '#09111f');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, 512, 256);
+
+  // Subtle stars in upper twilight sky
+  ctx.fillStyle = 'rgba(226, 232, 240, 0.65)';
+  for (let i = 0; i < 90; i++) {
+    const sx = (i * 73) % 512;
+    const sy = (i * 41) % 115;
+    const sr = (i % 3 === 0) ? 1.4 : 0.9;
+    ctx.fillRect(sx, sy, sr, sr);
+  }
+
+  // Distant city skyline silhouette near horizon
+  ctx.fillStyle = 'rgba(7, 13, 25, 0.85)';
+  let bx = 0;
+  let seed = 17;
+  while (bx < 512) {
+    seed = (seed * 31 + 13) % 97;
+    const bw = 12 + (seed % 22);
+    const bh = 16 + ((seed * 7) % 42);
+    ctx.fillRect(bx, 224 - bh, bw - 1, bh + 32);
+    // Tiny lit windows
+    ctx.fillStyle = 'rgba(251, 191, 36, 0.28)';
+    for (let wy = 224 - bh + 5; wy < 218; wy += 7) {
+      for (let wx = bx + 3; wx < bx + bw - 4; wx += 5) {
+        if ((wx + wy) % 3 === 0) ctx.fillRect(wx, wy, 2, 3);
+      }
+    }
+    ctx.fillStyle = 'rgba(7, 13, 25, 0.85)';
+    bx += bw;
   }
 
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
+}
+
+function drawSpeechBubbleCanvas(canvas, text, urgency = 'normal') {
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width;
+  const h = canvas.height;
+  ctx.clearRect(0, 0, w, h);
+
+  const palette = {
+    normal: { bg: 'rgba(15, 23, 42, 0.92)', border: '#38bdf8', text: '#f1f5f9' },
+    mild: { bg: 'rgba(40, 29, 8, 0.95)', border: '#fbbf24', text: '#fef3c7' },
+    major: { bg: 'rgba(69, 10, 10, 0.96)', border: '#f87171', text: '#fee2e2' },
+    trapped: { bg: 'rgba(88, 12, 24, 0.97)', border: '#fb7185', text: '#ffe4e6' },
+    safe: { bg: 'rgba(6, 46, 34, 0.94)', border: '#34d399', text: '#d1fae5' }
+  };
+  const style = palette[urgency] || palette.normal;
+
+  // Bubble box + pointer triangle
+  const boxH = h - 24;
+  ctx.fillStyle = style.bg;
+  drawRoundRectPath(ctx, 8, 6, w - 16, boxH, 20);
+  ctx.fill();
+
+  ctx.lineWidth = urgency === 'major' || urgency === 'trapped' ? 5 : 3.5;
+  ctx.strokeStyle = style.border;
+  drawRoundRectPath(ctx, 8, 6, w - 16, boxH, 20);
+  ctx.stroke();
+
+  // Pointer tail
+  ctx.fillStyle = style.border;
+  ctx.beginPath();
+  ctx.moveTo(w / 2 - 11, boxH + 6);
+  ctx.lineTo(w / 2 + 11, boxH + 6);
+  ctx.lineTo(w / 2, h - 3);
+  ctx.closePath();
+  ctx.fill();
+
+  // Word-wrap into up to 2 lines
+  ctx.fillStyle = style.text;
+  ctx.font = 'bold 23px system-ui, -apple-system, sans-serif';
+  ctx.textAlign = 'center';
+
+  const words = String(text || '').split(' ');
+  const lines = [];
+  let cur = '';
+  words.forEach((word) => {
+    const test = cur ? `${cur} ${word}` : word;
+    if (test.length > 26 && cur) {
+      lines.push(cur);
+      cur = word;
+    } else {
+      cur = test;
+    }
+  });
+  if (cur) lines.push(cur);
+
+  if (lines.length === 1) {
+    ctx.fillText(lines[0], w / 2, 58);
+  } else {
+    ctx.fillText(lines[0], w / 2, 43);
+    ctx.fillText(lines.slice(1).join(' ').slice(0, 32), w / 2, 74);
+  }
 }
 
 export class LPSBoxScene3D {
@@ -85,21 +210,18 @@ export class LPSBoxScene3D {
     this.sim = simulation;
     this.cb = callbacks;
 
-    this.mrVisionEnabled = true;
-    this.introOrbitActive = true;
     this.cameraMode = 'tactical'; // 'tactical' | 'firstperson' | 'gateway' | 'sniffer'
+    this.mrVisionEnabled = true;
 
-    // Scene & Renderer
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x070c16);
-    this.scene.fog = new THREE.FogExp2(0x070c16, 0.014);
+    this.scene.background = new THREE.Color(0x070d19);
+    this.scene.fog = new THREE.FogExp2(0x070d19, 0.011);
 
-    const w = container.clientWidth || window.innerWidth || 1280;
-    const h = container.clientHeight || window.innerHeight || 720;
+    const w = container.clientWidth || window.innerWidth;
+    const h = container.clientHeight || window.innerHeight;
 
-    this.camera = new THREE.PerspectiveCamera(52, w / h, 0.08, 140);
-    this.cameraBasePos = new THREE.Vector3(7.5, 11.5, 17.5);
-    this.camera.position.copy(this.cameraBasePos);
+    this.camera = new THREE.PerspectiveCamera(50, w / h, 0.1, 180);
+    this.camera.position.set(1.5, 13.8, 25.5);
 
     try {
       this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
@@ -110,621 +232,681 @@ export class LPSBoxScene3D {
     this.renderer.setSize(w, h);
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 1.12;
     this.renderer.xr.enabled = true;
     container.appendChild(this.renderer.domElement);
 
-    // VR / XR Rig so user sits naturally at Operator Command Post when entering VR
-    this.xrRig = new THREE.Group();
-    this.xrRig.position.set(0, 0, 0);
-    this.scene.add(this.xrRig);
-
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true;
-    this.controls.dampingFactor = 0.07;
+    this.controls.dampingFactor = 0.06;
+    this.controls.maxPolarAngle = Math.PI * 0.492;
+    this.controls.minDistance = 0.9;
+    this.controls.maxDistance = 54;
+    this.controls.target.set(0.2, 5.6, 1.2);
     this.controls.autoRotate = true;
     this.controls.autoRotateSpeed = 0.55;
-    this.controls.maxPolarAngle = Math.PI * 0.485;
-    this.controls.minDistance = 0.45;
-    this.controls.maxDistance = 42;
-    this.controls.target.set(0.8, 1.1, 2.2);
+    this.introOrbitActive = true;
 
-    // First-person movement state
-    this.keys = {};
-    this.fpPos = new THREE.Vector3(4.5, 1.68, 11.4);
-    this.fpYaw = 0.16;
-    this.fpPitch = -0.10;
+    this.keys = { w: false, a: false, s: false, d: false };
+    this.fpYaw = -0.32;
+    this.fpPitch = 0.06;
     this.isPointerDragging = false;
-    this.prevPointer = { x: 0, y: 0 };
-
-    // Collections for dynamic objects
-    this.worldShakeGroup = new THREE.Group();
-    this.scene.add(this.worldShakeGroup);
-
-    this.hangingLamps = [];
-    this.buildingRoomLights = [];
-    this.debrisGroups = {};
-    this.personMeshes = new Map();
-    this.hologramGroup = new THREE.Group();
-    this.worldShakeGroup.add(this.hologramGroup);
-
-    this.rfPulsePool = [];
-    this.shockwavePool = [];
-    this.snifferBeamParticles = [];
 
     this.raycaster = new THREE.Raycaster();
-    this.pointerNDC = new THREE.Vector2();
+    this.pointerNdc = new THREE.Vector2();
     this.clickableGateway = [];
-    this.clickableDesk = [];
+    this.clickablePole = [];
     this.clickableSniffer = [];
 
-    this._setupLights();
-    this._buildGroundAndBuilding();
-    this._buildOperatorDeskAndGateway();
+    this.worldGroup = new THREE.Group();
+    this.scene.add(this.worldGroup);
+
+    // 4 floor groups so upper floors sway with realistic seismic modal drift!
+    this.buildingGroup = new THREE.Group();
+    this.worldGroup.add(this.buildingGroup);
+    this.floorGroups = [];
+    for (let f = 0; f < 4; f++) {
+      const fg = new THREE.Group();
+      fg.position.set(0, f * FLOOR_HEIGHT, 0);
+      this.buildingGroup.add(fg);
+      this.floorGroups.push(fg);
+    }
+    this.rooftopGroup = new THREE.Group();
+    this.rooftopGroup.position.set(0, FLOOR_HEIGHT * 4, 0);
+    this.buildingGroup.add(this.rooftopGroup);
+
+    this.stairwellGroup = new THREE.Group();
+    this.buildingGroup.add(this.stairwellGroup);
+
+    this.personMeshes = new Map();
+    this.hologramGroup = new THREE.Group();
+    this.buildingGroup.add(this.hologramGroup);
+    this.lastHoloSignature = '';
+
+    // Dynamic physics props, sparks & dust clouds
+    this.dynamicProps = [];
+    this.sparks = [];
+    this.dustPuffs = [];
+    this.floorAlarmLights = [];
+    this._crashSoundCooldown = 0;
+
+    this._setupSkyAndLights();
+    this._buildUrbanExterior();
+    this._buildFourStoryBuilding();
+    this._buildStairwellTower();
+    this._buildRooftop();
     this._buildSnifferStation();
+    this._buildStreetLightPoleGateway();
+    this._buildDynamicPropsAcrossFloors();
     this._buildParticlePools();
     this._bindInputs();
 
     window.addEventListener('resize', () => this.onResize());
   }
 
-  _setupLights() {
-    this.ambientLight = new THREE.AmbientLight(0x8fa8cc, 0.72);
+  stopIntroOrbit() {
+    if (this.introOrbitActive) {
+      this.introOrbitActive = false;
+      this.controls.autoRotate = false;
+    }
+  }
+
+  restoreBackground() {
+    if (!this.scene.background) {
+      this.scene.background = new THREE.Color(0x070d19);
+    } else if (this.scene.background.set) {
+      this.scene.background.set(0x070d19);
+    }
+  }
+
+  _setupSkyAndLights() {
+    // Atmospheric sky dome
+    const skyGeo = new THREE.SphereGeometry(110, 32, 20);
+    const skyMat = new THREE.MeshBasicMaterial({
+      map: createSkyTexture(),
+      side: THREE.BackSide,
+      fog: false
+    });
+    this.skyDome = new THREE.Mesh(skyGeo, skyMat);
+    this.scene.add(this.skyDome);
+
+    this.ambientLight = new THREE.AmbientLight(0x9fb8db, 0.78);
     this.scene.add(this.ambientLight);
 
-    const hemi = new THREE.HemisphereLight(0x7dd3fc, 0x0f172a, 0.55);
+    const hemi = new THREE.HemisphereLight(0x93c5fd, 0x111827, 0.65);
     this.scene.add(hemi);
 
-    this.sunLight = new THREE.DirectionalLight(0xe2e8f0, 1.25);
-    this.sunLight.position.set(14, 24, 16);
+    this.sunLight = new THREE.DirectionalLight(0xf1f5f9, 1.35);
+    this.sunLight.position.set(16, 28, 22);
     this.sunLight.castShadow = true;
     this.sunLight.shadow.mapSize.set(2048, 2048);
-    this.sunLight.shadow.camera.left = -18;
-    this.sunLight.shadow.camera.right = 18;
-    this.sunLight.shadow.camera.top = 18;
-    this.sunLight.shadow.camera.bottom = -18;
+    this.sunLight.shadow.camera.left = -22;
+    this.sunLight.shadow.camera.right = 22;
+    this.sunLight.shadow.camera.top = 24;
+    this.sunLight.shadow.camera.bottom = -16;
+    this.sunLight.shadow.bias = -0.0005;
     this.scene.add(this.sunLight);
+
+    const coolRim = new THREE.DirectionalLight(0x38bdf8, 0.45);
+    coolRim.position.set(-18, 14, -14);
+    this.scene.add(coolRim);
   }
 
-  _buildGroundAndBuilding() {
-    // Exterior tactical grid floor
-    const groundGeo = new THREE.PlaneGeometry(64, 64);
-    const groundMat = new THREE.MeshStandardMaterial({
-      color: 0x0a101d,
-      roughness: 0.92,
-      metalness: 0.08
-    });
-    const ground = new THREE.Mesh(groundGeo, groundMat);
+  _buildUrbanExterior() {
+    // Base urban terrain
+    const ground = new THREE.Mesh(
+      new THREE.PlaneGeometry(110, 110),
+      new THREE.MeshStandardMaterial({ color: 0x0b1322, roughness: 0.94, metalness: 0.04 })
+    );
     ground.rotation.x = -Math.PI / 2;
     ground.receiveShadow = true;
-    this.worldShakeGroup.add(ground);
+    this.worldGroup.add(ground);
 
-    const grid = new THREE.GridHelper(56, 56, 0x1e3a5f, 0x111e33);
-    grid.position.y = 0.01;
-    this.worldShakeGroup.add(grid);
+    // Building concrete plaza & front sidewalk (z in [-6..5.8])
+    const plaza = new THREE.Mesh(
+      new THREE.BoxGeometry(28, 0.14, 12.6),
+      new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.85 })
+    );
+    plaza.position.set(0, 0.07, -0.3);
+    plaza.receiveShadow = true;
+    this.worldGroup.add(plaza);
 
-    // Building floor slab (-11..11, -9..5)
-    const slabGeo = new THREE.BoxGeometry(22.2, 0.14, 14.2);
-    const slabMat = new THREE.MeshStandardMaterial({ color: 0x151f30, roughness: 0.8 });
-    const slab = new THREE.Mesh(slabGeo, slabMat);
-    slab.position.set(0, 0.07, -2.0);
-    slab.receiveShadow = true;
-    this.worldShakeGroup.add(slab);
+    // Street asphalt roadway (z in [5.8..12.6])
+    const road = new THREE.Mesh(
+      new THREE.BoxGeometry(46, 0.06, 6.6),
+      new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.92 })
+    );
+    road.position.set(0, 0.03, 9.1);
+    road.receiveShadow = true;
+    this.worldGroup.add(road);
 
-    // Zone colored floor pads, furniture, hanging lamps, and collapse rubble placeholders
-    ZONES.forEach((zone) => {
-      const w = zone.bounds.xMax - zone.bounds.xMin;
-      const d = zone.bounds.zMax - zone.bounds.zMin;
-      const cx = (zone.bounds.xMin + zone.bounds.xMax) / 2;
-      const cz = (zone.bounds.zMin + zone.bounds.zMax) / 2;
+    // South park / plaza island where Safe Assembly & Pole sit (z in [7.2..13.5] sidewalks on sides)
+    const southPlaza = new THREE.Mesh(
+      new THREE.BoxGeometry(30, 0.14, 6.2),
+      new THREE.MeshStandardMaterial({ color: 0x1a2639, roughness: 0.86 })
+    );
+    southPlaza.position.set(0, 0.07, 10.2);
+    southPlaza.receiveShadow = true;
+    this.worldGroup.add(southPlaza);
 
-      const padMat = new THREE.MeshStandardMaterial({
-        color: new THREE.Color(zone.color).multiplyScalar(0.22),
-        roughness: 0.85
+    // Pedestrian crosswalk stripes leading from lobby door to Safe Assembly Plaza
+    const stripeMat = new THREE.MeshBasicMaterial({ color: 0xe2e8f0, transparent: true, opacity: 0.75 });
+    for (let i = 0; i < 6; i++) {
+      const st = new THREE.Mesh(new THREE.PlaneGeometry(0.52, 2.2), stripeMat);
+      st.rotation.x = -Math.PI / 2;
+      st.position.set(-3.2 + i * 0.95, 0.148, 6.3);
+      this.worldGroup.add(st);
+    }
+
+    // Landscaped trees & planters around exterior
+    const treePositions = [
+      [-12.2, 4.8], [-12.5, 10.6], [11.8, 5.0], [11.8, 10.8], [-2.2, 11.8], [2.6, 11.8]
+    ];
+    treePositions.forEach(([tx, tz], idx) => {
+      const treeGrp = new THREE.Group();
+      treeGrp.position.set(tx, 0.14, tz);
+
+      const planter = new THREE.Mesh(
+        new THREE.BoxGeometry(1.3, 0.32, 1.3),
+        new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.8 })
+      );
+      planter.position.y = 0.16;
+      treeGrp.add(planter);
+
+      const trunk = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.11, 0.16, 1.6, 8),
+        new THREE.MeshStandardMaterial({ color: 0x5c4033, roughness: 0.9 })
+      );
+      trunk.position.y = 1.05;
+      trunk.castShadow = true;
+      treeGrp.add(trunk);
+
+      const foliageMat = new THREE.MeshStandardMaterial({
+        color: idx % 2 === 0 ? 0x15803d : 0x166534,
+        roughness: 0.78
       });
-      const pad = new THREE.Mesh(new THREE.PlaneGeometry(w, d), padMat);
-      pad.rotation.x = -Math.PI / 2;
-      pad.position.set(cx, 0.145, cz);
-      pad.receiveShadow = true;
-      this.worldShakeGroup.add(pad);
+      const crown1 = new THREE.Mesh(new THREE.DodecahedronGeometry(0.95, 1), foliageMat);
+      crown1.position.y = 2.25;
+      crown1.castShadow = true;
+      treeGrp.add(crown1);
 
-      // Border strip
-      const edges = new THREE.EdgesGeometry(new THREE.BoxGeometry(w, 0.02, d));
-      const line = new THREE.LineSegments(
-        edges,
-        new THREE.LineBasicMaterial({ color: zone.color, transparent: true, opacity: 0.65 })
-      );
-      line.position.set(cx, 0.155, cz);
-      this.worldShakeGroup.add(line);
+      const crown2 = new THREE.Mesh(new THREE.DodecahedronGeometry(0.68, 1), foliageMat);
+      crown2.position.set(0.32, 2.75, 0.18);
+      treeGrp.add(crown2);
 
-      // Floating zone sign
-      const labelTex = makeLabelTexture(zone.code, zone.shortName, zone.color);
-      const sign = new THREE.Mesh(
-        new THREE.PlaneGeometry(2.7, 0.85),
-        new THREE.MeshBasicMaterial({ map: labelTex, transparent: true, side: THREE.DoubleSide })
-      );
-      sign.position.set(cx, 2.75, cz);
-      this.worldShakeGroup.add(sign);
-
-      // Zone interior furniture
-      this._populateZoneFurniture(zone, cx, cz);
-
-      // Hanging pendulum lamp
-      const lampPivot = new THREE.Group();
-      lampPivot.position.set(cx, 3.6, cz);
-      const cord = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.015, 0.015, 0.75),
-        new THREE.MeshBasicMaterial({ color: 0x64748b })
-      );
-      cord.position.y = -0.375;
-      const shade = new THREE.Mesh(
-        new THREE.ConeGeometry(0.32, 0.2, 16),
-        new THREE.MeshStandardMaterial({
-          color: 0x334155,
-          emissive: 0xbae6fd,
-          emissiveIntensity: 0.6
-        })
-      );
-      shade.position.y = -0.75;
-      const pLight = new THREE.PointLight(0xe0f2fe, 2.4, 11);
-      pLight.position.y = -0.82;
-      lampPivot.add(cord, shade, pLight);
-      this.worldShakeGroup.add(lampPivot);
-      this.hangingLamps.push({ pivot: lampPivot, shade, light: pLight, phase: cx * 0.3 });
-      this.buildingRoomLights.push(pLight);
-
-      // Collapse debris group (hidden until major earthquake collapse!)
-      const debrisGrp = new THREE.Group();
-      debrisGrp.visible = false;
-      for (let i = 0; i < 12; i++) {
-        const chunk = new THREE.Mesh(
-          new THREE.DodecahedronGeometry(0.22 + (i % 3) * 0.14, 0),
-          new THREE.MeshStandardMaterial({ color: 0x475569, roughness: 0.95 })
-        );
-        chunk.position.set(
-          cx + Math.cos(i * 1.7) * 2.1,
-          0.24 + (i % 2) * 0.15,
-          cz + Math.sin(i * 2.3) * 1.5
-        );
-        chunk.rotation.set(i, i * 0.6, 0);
-        chunk.castShadow = true;
-        debrisGrp.add(chunk);
-      }
-      // Fallen ceiling beam
-      const beam = new THREE.Mesh(
-        new THREE.BoxGeometry(3.4, 0.22, 0.28),
-        new THREE.MeshStandardMaterial({ color: 0x334155, metalness: 0.4, roughness: 0.7 })
-      );
-      beam.position.set(cx, 0.55, cz + 0.6);
-      beam.rotation.set(0.18, 0.4, -0.22);
-      debrisGrp.add(beam);
-
-      // Warning hazard beacon
-      const haz = new THREE.PointLight(0xef4444, 3.0, 7);
-      haz.position.set(cx, 1.4, cz);
-      debrisGrp.add(haz);
-
-      this.worldShakeGroup.add(debrisGrp);
-      this.debrisGroups[zone.id] = debrisGrp;
+      this.worldGroup.add(treeGrp);
     });
 
-    // Cutaway Perimeter & Partition Walls (waist-high solid + glass upper band so interior is 100% visible)
-    const wallMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.75 });
-    const glassMat = new THREE.MeshPhysicalMaterial({
-      color: 0x38bdf8,
-      transparent: true,
-      opacity: 0.10,
-      roughness: 0.15
-    });
+    // Safe Assembly Point (Punto de Encuentro Seguro)
+    const apGroup = new THREE.Group();
+    apGroup.position.set(ASSEMBLY_POINT.x, 0.15, ASSEMBLY_POINT.z);
 
-    const addCutawayWall = (x, z, w, d) => {
-      const base = new THREE.Mesh(new THREE.BoxGeometry(w, 1.25, d), wallMat);
-      base.position.set(x, 0.76, z);
-      base.castShadow = true;
-      base.receiveShadow = true;
-      this.worldShakeGroup.add(base);
+    const apPad = new THREE.Mesh(
+      new THREE.CircleGeometry(ASSEMBLY_POINT.radius, 36),
+      new THREE.MeshBasicMaterial({ color: 0x10b981, transparent: true, opacity: 0.2 })
+    );
+    apPad.rotation.x = -Math.PI / 2;
+    apGroup.add(apPad);
 
-      const glass = new THREE.Mesh(new THREE.BoxGeometry(w, 1.8, d), glassMat);
-      glass.position.set(x, 2.28, z);
-      this.worldShakeGroup.add(glass);
-    };
+    this.assemblyRing = new THREE.Mesh(
+      new THREE.RingGeometry(ASSEMBLY_POINT.radius - 0.14, ASSEMBLY_POINT.radius, 48),
+      new THREE.MeshBasicMaterial({ color: 0x34d399, side: THREE.DoubleSide })
+    );
+    this.assemblyRing.rotation.x = -Math.PI / 2;
+    this.assemblyRing.position.y = 0.015;
+    apGroup.add(this.assemblyRing);
 
-    // Back wall (-9), Left wall (-11), Right wall (+11), Front walls leaving central exit door at x ∈ [-1.6, 1.6]
-    addCutawayWall(0, -9.0, 22.2, 0.22);
-    addCutawayWall(-11.0, -2.0, 0.22, 14.2);
-    addCutawayWall(11.0, -2.0, 0.22, 14.2);
-    addCutawayWall(-6.3, 5.0, 9.4, 0.22);
-    addCutawayWall(6.3, 5.0, 9.4, 0.22);
+    const apPost = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.05, 0.05, 2.2, 10),
+      new THREE.MeshStandardMaterial({ color: 0x64748b, metalness: 0.6 })
+    );
+    apPost.position.set(0, 1.1, -ASSEMBLY_POINT.radius + 0.2);
+    apGroup.add(apPost);
 
-    // Interior partial dividers with open corridors
-    addCutawayWall(-6.2, -1.9, 8.8, 0.16);
-    addCutawayWall(6.2, -1.9, 8.8, 0.16);
-    addCutawayWall(0, -6.0, 0.16, 5.6);
-
-    // Green illuminated EXIT arch at (0, 5.0)
-    const exitSign = new THREE.Mesh(
-      new THREE.PlaneGeometry(2.1, 0.55),
+    const apSign = new THREE.Mesh(
+      new THREE.PlaneGeometry(3.2, 0.88),
       new THREE.MeshBasicMaterial({
-        map: makeLabelTexture('SALIDA EMERGENCIA', 'Evacuación →', '#10b981', 0.9),
+        map: makeLabelTexture('PUNTO DE ENCUENTRO', 'Zona Segura de Evacuación', '#10b981'),
         transparent: true,
         side: THREE.DoubleSide
       })
     );
-    exitSign.position.set(0, 2.55, 5.05);
-    this.worldShakeGroup.add(exitSign);
+    apSign.position.set(0, 2.35, -ASSEMBLY_POINT.radius + 0.2);
+    apGroup.add(apSign);
 
-    // Outdoor Evacuation Assembly Point (-6.2, 9.8)
-    const assemblyRing = new THREE.Mesh(
-      new THREE.RingGeometry(2.3, 2.65, 48),
-      new THREE.MeshBasicMaterial({ color: 0x10b981, side: THREE.DoubleSide })
-    );
-    assemblyRing.rotation.x = -Math.PI / 2;
-    assemblyRing.position.set(ASSEMBLY_POINT.x, 0.03, ASSEMBLY_POINT.z);
-    this.worldShakeGroup.add(assemblyRing);
-
-    const assemblyFill = new THREE.Mesh(
-      new THREE.CircleGeometry(2.3, 48),
-      new THREE.MeshBasicMaterial({ color: 0x064e3b, transparent: true, opacity: 0.42 })
-    );
-    assemblyFill.rotation.x = -Math.PI / 2;
-    assemblyFill.position.set(ASSEMBLY_POINT.x, 0.025, ASSEMBLY_POINT.z);
-    this.worldShakeGroup.add(assemblyFill);
-
-    const assemblySign = new THREE.Mesh(
-      new THREE.PlaneGeometry(3.1, 0.95),
-      new THREE.MeshBasicMaterial({
-        map: makeLabelTexture('PUNTO DE ENCUENTRO', 'Zona Segura Exterior', '#10b981'),
-        transparent: true,
-        side: THREE.DoubleSide
-      })
-    );
-    assemblySign.position.set(ASSEMBLY_POINT.x, 1.8, ASSEMBLY_POINT.z);
-    this.worldShakeGroup.add(assemblySign);
+    this.worldGroup.add(apGroup);
   }
 
-  _populateZoneFurniture(zone, cx, cz) {
-    const deskMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.65 });
-    const darkMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, metalness: 0.5, roughness: 0.4 });
-    const screenMat = new THREE.MeshStandardMaterial({
-      color: 0x0ea5e9,
-      emissive: 0x0284c7,
-      emissiveIntensity: 0.45
+  _buildFourStoryBuilding() {
+    const colMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.65, metalness: 0.2 });
+    const slabMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.78 });
+    const backWallMat = new THREE.MeshStandardMaterial({ color: 0x162235, roughness: 0.82 });
+    const glassMat = new THREE.MeshPhysicalMaterial({
+      color: 0x7dd3fc,
+      transparent: true,
+      opacity: 0.16,
+      roughness: 0.15,
+      metalness: 0.1,
+      side: THREE.DoubleSide
     });
 
-    if (zone.id === 'A') {
-      // Electronics Lab benches with oscilloscopes
-      [-2.2, 2.0].forEach((dx) => {
-        [-1.1, 1.3].forEach((dz) => {
-          const bench = new THREE.Mesh(new THREE.BoxGeometry(2.5, 0.76, 0.9), deskMat);
-          bench.position.set(cx + dx, 0.52, cz + dz);
-          bench.castShadow = true;
-          const scope = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.3, 0.28), screenMat);
-          scope.position.set(cx + dx - 0.5, 1.05, cz + dz);
-          this.worldShakeGroup.add(bench, scope);
-        });
+    ZONES.forEach((zone, fIdx) => {
+      const fg = this.floorGroups[fIdx];
+
+      // Floor structural concrete slab (-8.8 .. +5.6, z: -4.4 .. +3.6)
+      const slab = new THREE.Mesh(new THREE.BoxGeometry(14.6, 0.22, 8.2), slabMat);
+      slab.position.set(-1.5, 0.11, -0.4);
+      slab.receiveShadow = true;
+      slab.castShadow = true;
+      fg.add(slab);
+
+      // Colored architectural floor finish + perimeter LED strip
+      const finishMat = new THREE.MeshStandardMaterial({
+        color: new THREE.Color(zone.color).multiplyScalar(0.24),
+        roughness: 0.8
       });
-    } else if (zone.id === 'B') {
-      // Server racks + office desks
-      for (let i = -1; i <= 1; i++) {
-        const rack = new THREE.Mesh(new THREE.BoxGeometry(0.95, 1.95, 0.95), darkMat);
-        rack.position.set(cx - 2.3 + i * 1.35, 1.12, cz - 1.4);
-        rack.castShadow = true;
-        const ledStrip = new THREE.Mesh(
-          new THREE.BoxGeometry(0.7, 0.08, 0.02),
-          new THREE.MeshBasicMaterial({ color: 0xa855f7 })
+      const finish = new THREE.Mesh(new THREE.PlaneGeometry(13.8, 7.4), finishMat);
+      finish.rotation.x = -Math.PI / 2;
+      finish.position.set(-1.5, 0.225, -0.4);
+      finish.receiveShadow = true;
+      fg.add(finish);
+
+      const trim = new THREE.Mesh(
+        new THREE.BoxGeometry(14.62, 0.08, 0.08),
+        new THREE.MeshBasicMaterial({ color: zone.color })
+      );
+      trim.position.set(-1.5, 0.21, 3.68);
+      fg.add(trim);
+
+      // Structural concrete columns at corners & mid-span
+      const colCoords = [
+        [-8.6, -4.3], [-1.5, -4.3], [5.4, -4.3],
+        [-8.6, 3.5], [5.4, 3.5]
+      ];
+      colCoords.forEach(([cx, cz]) => {
+        const col = new THREE.Mesh(new THREE.BoxGeometry(0.34, FLOOR_HEIGHT, 0.34), colMat);
+        col.position.set(cx, FLOOR_HEIGHT / 2, cz);
+        col.castShadow = true;
+        col.receiveShadow = true;
+        fg.add(col);
+      });
+
+      // Back solid wall with window bands
+      const lowerBack = new THREE.Mesh(new THREE.BoxGeometry(14.4, 1.15, 0.18), backWallMat);
+      lowerBack.position.set(-1.5, 0.7, -4.35);
+      fg.add(lowerBack);
+
+      const upperBack = new THREE.Mesh(new THREE.BoxGeometry(14.4, 0.55, 0.18), backWallMat);
+      upperBack.position.set(-1.5, FLOOR_HEIGHT - 0.28, -4.35);
+      fg.add(upperBack);
+
+      const backGlass = new THREE.Mesh(new THREE.PlaneGeometry(14.0, 1.5), glassMat);
+      backGlass.position.set(-1.5, 2.0, -4.35);
+      fg.add(backGlass);
+
+      // Left glass curtain wall
+      const leftGlass = new THREE.Mesh(new THREE.PlaneGeometry(7.8, FLOOR_HEIGHT - 0.25), glassMat);
+      leftGlass.rotation.y = Math.PI / 2;
+      leftGlass.position.set(-8.6, FLOOR_HEIGHT / 2 + 0.1, -0.4);
+      fg.add(leftGlass);
+
+      // Cutaway front glass safety balustrade on upper floors (Pisos 2, 3, 4) or lobby entrance on Piso 1
+      if (fIdx > 0) {
+        const railGlass = new THREE.Mesh(new THREE.BoxGeometry(13.8, 0.88, 0.04), glassMat);
+        railGlass.position.set(-1.5, 0.66, 3.58);
+        fg.add(railGlass);
+
+        const handrail = new THREE.Mesh(
+          new THREE.BoxGeometry(14.0, 0.05, 0.07),
+          new THREE.MeshStandardMaterial({ color: 0x94a3b8, metalness: 0.7, roughness: 0.3 })
         );
-        ledStrip.position.set(cx - 2.3 + i * 1.35, 1.75, cz - 0.91);
-        this.worldShakeGroup.add(rack, ledStrip);
+        handrail.position.set(-1.5, 1.12, 3.58);
+        fg.add(handrail);
+      } else {
+        // Piso 1 Main Entrance Portal frame at x = -1.2, z = 3.65
+        const portalMat = new THREE.MeshStandardMaterial({ color: 0x38bdf8, metalness: 0.5, roughness: 0.3 });
+        const pLeft = new THREE.Mesh(new THREE.BoxGeometry(0.16, 2.5, 0.22), portalMat);
+        pLeft.position.set(-2.4, 1.35, 3.62);
+        const pRight = new THREE.Mesh(new THREE.BoxGeometry(0.16, 2.5, 0.22), portalMat);
+        pRight.position.set(0.0, 1.35, 3.62);
+        const pTop = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.18, 0.35), portalMat);
+        pTop.position.set(-1.2, 2.62, 3.62);
+        fg.add(pLeft, pRight, pTop);
       }
-      const desk = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.75, 1.0), deskMat);
-      desk.position.set(cx + 1.8, 0.52, cz + 1.2);
-      this.worldShakeGroup.add(desk);
-    } else if (zone.id === 'C') {
-      // Auditorium rows + podium
-      const podium = new THREE.Mesh(new THREE.BoxGeometry(1.4, 1.05, 0.7), deskMat);
-      podium.position.set(cx, 0.66, cz - 2.0);
-      this.worldShakeGroup.add(podium);
-      for (let row = 0; row < 3; row++) {
-        const seatRow = new THREE.Mesh(new THREE.BoxGeometry(5.6, 0.48, 0.55), deskMat);
-        seatRow.position.set(cx, 0.38, cz - 0.5 + row * 1.15);
-        seatRow.castShadow = true;
-        this.worldShakeGroup.add(seatRow);
-      }
-    } else if (zone.id === 'D') {
-      // Cafeteria round tables
-      [
-        [-2.0, -1.0],
-        [1.8, -1.0],
-        [-1.8, 1.2],
-        [2.0, 1.2]
-      ].forEach(([dx, dz]) => {
-        const tbl = new THREE.Mesh(new THREE.CylinderGeometry(0.75, 0.75, 0.74, 20), deskMat);
-        tbl.position.set(cx + dx, 0.51, cz + dz);
-        tbl.castShadow = true;
-        this.worldShakeGroup.add(tbl);
+
+      // Floor Badge Sign on left column
+      const floorSign = new THREE.Mesh(
+        new THREE.PlaneGeometry(3.25, 0.86),
+        new THREE.MeshBasicMaterial({
+          map: makeLabelTexture(zone.code.toUpperCase(), zone.name.split('—')[1]?.trim() || zone.shortName, zone.color),
+          transparent: true
+        })
+      );
+      floorSign.position.set(-6.8, FLOOR_HEIGHT - 0.52, 3.72);
+      fg.add(floorSign);
+
+      // Floor Passive RF Sensor Repeater node wired to Piso 2 RPi5 Sniffer
+      const repBox = new THREE.Mesh(
+        new THREE.BoxGeometry(0.24, 0.16, 0.08),
+        new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.4 })
+      );
+      repBox.position.set(5.1, FLOOR_HEIGHT - 0.55, -4.18);
+      fg.add(repBox);
+      const repLed = new THREE.Mesh(
+        new THREE.SphereGeometry(0.03, 8, 8),
+        new THREE.MeshBasicMaterial({ color: zone.color })
+      );
+      repLed.position.set(5.1, FLOOR_HEIGHT - 0.55, -4.12);
+      fg.add(repLed);
+
+      // Emergency red strobe beacon + floor interior warm/alert light
+      const beaconBulb = new THREE.Mesh(
+        new THREE.SphereGeometry(0.09, 12, 12),
+        new THREE.MeshBasicMaterial({ color: 0x450a0a })
+      );
+      beaconBulb.position.set(4.8, FLOOR_HEIGHT - 0.38, 3.45);
+      fg.add(beaconBulb);
+
+      const floorLight = new THREE.PointLight(0xe2e8f0, 0.55, 13);
+      floorLight.position.set(-1.5, FLOOR_HEIGHT - 0.45, 0.0);
+      fg.add(floorLight);
+
+      this.floorAlarmLights.push({ bulb: beaconBulb, light: floorLight, zoneId: zone.id });
+
+      // Populate static architectural furniture per floor
+      this._populateFloorStaticFurniture(fg, fIdx);
+    });
+  }
+
+  _populateFloorStaticFurniture(fg, fIdx) {
+    const deskMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.65 });
+    const darkMetal = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.5, metalness: 0.45 });
+    const accentWood = new THREE.MeshStandardMaterial({ color: 0x6b4f3a, roughness: 0.75 });
+
+    if (fIdx === 0) {
+      // PISO 1: Cafetería & Lobby
+      const counter = new THREE.Mesh(new THREE.BoxGeometry(3.4, 1.02, 0.85), accentWood);
+      counter.position.set(-5.8, 0.73, -2.5);
+      counter.castShadow = true;
+      fg.add(counter);
+
+      // Espresso machine on counter
+      const espresso = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.48, 0.45), darkMetal);
+      espresso.position.set(-6.2, 1.48, -2.5);
+      fg.add(espresso);
+
+      // Round café tables
+      [[-5.2, 1.1], [-2.2, 1.2], [2.2, 1.1], [2.5, -1.8]].forEach(([tx, tz]) => {
+        const top = new THREE.Mesh(new THREE.CylinderGeometry(0.72, 0.72, 0.06, 18), accentWood);
+        top.position.set(tx, 0.96, tz);
+        top.castShadow = true;
+        const ped = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.22, 0.74, 12), darkMetal);
+        ped.position.set(tx, 0.58, tz);
+        fg.add(top, ped);
+      });
+    } else if (fIdx === 1) {
+      // PISO 2: Laboratorio de Electrónica & Nodo Sniffer RPi5
+      [[-5.6, -1.6], [-5.6, 1.2], [2.4, -1.6], [2.4, 1.2]].forEach(([bx, bz]) => {
+        const bench = new THREE.Mesh(new THREE.BoxGeometry(2.7, 0.82, 1.05), deskMat);
+        bench.position.set(bx, 0.63, bz);
+        bench.castShadow = true;
+        fg.add(bench);
+      });
+    } else if (fIdx === 2) {
+      // PISO 3: Sala de Servidores y Telecom
+      [[-6.0, 1.2], [2.2, 1.2]].forEach(([bx, bz]) => {
+        const nocDesk = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.8, 1.0), deskMat);
+        nocDesk.position.set(bx, 0.62, bz);
+        nocDesk.castShadow = true;
+        fg.add(nocDesk);
+      });
+    } else if (fIdx === 3) {
+      // PISO 4: Auditorio & Sala de Proyectos
+      const podium = new THREE.Mesh(new THREE.BoxGeometry(0.9, 1.15, 0.65), accentWood);
+      podium.position.set(-6.8, 0.8, -0.4);
+      podium.castShadow = true;
+      fg.add(podium);
+
+      // Rows of auditorium benches/desks
+      [-3.8, -1.2, 1.4].forEach((rx) => {
+        [-2.0, 0.9].forEach((rz) => {
+          const row = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.78, 1.8), deskMat);
+          row.position.set(rx, 0.61, rz);
+          row.castShadow = true;
+          fg.add(row);
+        });
       });
     }
   }
 
-  _buildOperatorDeskAndGateway() {
-    const gx = GATEWAY_WORLD_POS.x;
-    const gz = GATEWAY_WORLD_POS.z;
-
-    // Tactical Operator Command Station Platform
-    const pad = new THREE.Mesh(
-      new THREE.BoxGeometry(4.4, 0.08, 3.0),
-      new THREE.MeshStandardMaterial({ color: 0x17253b, roughness: 0.75 })
-    );
-    pad.position.set(gx, 0.04, gz + 0.4);
-    pad.receiveShadow = true;
-    this.worldShakeGroup.add(pad);
-
-    // Command Table (clickable to trigger physical MPU6050 impact shockwave!)
-    const tableTop = new THREE.Mesh(
-      new THREE.BoxGeometry(2.6, 0.1, 1.15),
-      new THREE.MeshStandardMaterial({ color: 0x29374d, roughness: 0.55, metalness: 0.25 })
-    );
-    tableTop.position.set(gx, 0.87, gz);
-    tableTop.castShadow = true;
-    tableTop.receiveShadow = true;
-    this.worldShakeGroup.add(tableTop);
-    this.clickableDesk.push(tableTop);
-
-    [
-      [-1.15, -0.45],
-      [1.15, -0.45],
-      [-1.15, 0.45],
-      [1.15, 0.45]
-    ].forEach(([lx, lz]) => {
-      const leg = new THREE.Mesh(
-        new THREE.BoxGeometry(0.09, 0.85, 0.09),
-        new THREE.MeshStandardMaterial({ color: 0x0f172a, metalness: 0.6 })
-      );
-      leg.position.set(gx + lx, 0.43, gz + lz);
-      this.worldShakeGroup.add(leg);
+  _buildStairwellTower() {
+    // Glass emergency stairwell on right wing (x in [5.6..8.8], z in [-3.8..3.2], y in [0..12.8])
+    const frameMat = new THREE.MeshStandardMaterial({ color: 0x334155, metalness: 0.45, roughness: 0.5 });
+    const stepMat = new THREE.MeshStandardMaterial({ color: 0x475569, roughness: 0.7 });
+    const railMat = new THREE.MeshStandardMaterial({ color: 0xfbbf24, roughness: 0.4, metalness: 0.3 });
+    const glassMat = new THREE.MeshPhysicalMaterial({
+      color: 0x93c5fd,
+      transparent: true,
+      opacity: 0.14,
+      roughness: 0.1,
+      side: THREE.DoubleSide
     });
 
-    // Desk label
-    const opSign = new THREE.Mesh(
-      new THREE.PlaneGeometry(2.9, 0.88),
+    // Vertical corner steel mullions
+    [[5.6, -3.8], [8.8, -3.8], [5.6, 3.2], [8.8, 3.2]].forEach(([sx, sz]) => {
+      const post = new THREE.Mesh(new THREE.BoxGeometry(0.22, FLOOR_HEIGHT * 4 + 0.5, 0.22), frameMat);
+      post.position.set(sx, FLOOR_HEIGHT * 2 + 0.25, sz);
+      this.stairwellGroup.add(post);
+    });
+
+    // Outer glass enclosure panels (open at ground door z=3.2)
+    const sideGlass = new THREE.Mesh(new THREE.PlaneGeometry(7.0, FLOOR_HEIGHT * 4), glassMat);
+    sideGlass.rotation.y = Math.PI / 2;
+    sideGlass.position.set(8.8, FLOOR_HEIGHT * 2, -0.3);
+    this.stairwellGroup.add(sideGlass);
+
+    // Flights & landings between each floor
+    for (let f = 0; f < 4; f++) {
+      const y0 = f * FLOOR_HEIGHT;
+
+      // Floor landing connecting building to stairwell
+      const landing = new THREE.Mesh(new THREE.BoxGeometry(3.1, 0.16, 1.8), stepMat);
+      landing.position.set(7.2, y0 + 0.1, -2.8);
+      this.stairwellGroup.add(landing);
+
+      if (f < 3) {
+        // Mid-landing at y0 + 1.6m, z = +2.2
+        const midLanding = new THREE.Mesh(new THREE.BoxGeometry(3.1, 0.16, 1.6), stepMat);
+        midLanding.position.set(7.2, y0 + FLOOR_HEIGHT * 0.5, 2.2);
+        this.stairwellGroup.add(midLanding);
+
+        // Flight 1 (up from y0 at z=-2.0 to y0+1.6 at z=+1.5 along x=6.55)
+        const flightLen = Math.hypot(3.5, FLOOR_HEIGHT * 0.5);
+        const pitch = Math.atan2(FLOOR_HEIGHT * 0.5, 3.5);
+
+        const ramp1 = new THREE.Mesh(new THREE.BoxGeometry(1.15, 0.12, flightLen), stepMat);
+        ramp1.position.set(6.55, y0 + FLOOR_HEIGHT * 0.25, -0.25);
+        ramp1.rotation.x = -pitch;
+        this.stairwellGroup.add(ramp1);
+
+        const rail1 = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, flightLen), railMat);
+        rail1.position.set(7.08, y0 + FLOOR_HEIGHT * 0.25 + 0.75, -0.25);
+        rail1.rotation.x = -pitch;
+        this.stairwellGroup.add(rail1);
+
+        // Flight 2 (up from y0+1.6 at z=+1.5 to y0+3.2 at z=-2.0 along x=7.85)
+        const ramp2 = new THREE.Mesh(new THREE.BoxGeometry(1.15, 0.12, flightLen), stepMat);
+        ramp2.position.set(7.85, y0 + FLOOR_HEIGHT * 0.75, -0.25);
+        ramp2.rotation.x = pitch;
+        this.stairwellGroup.add(ramp2);
+
+        const rail2 = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, flightLen), railMat);
+        rail2.position.set(7.32, y0 + FLOOR_HEIGHT * 0.75 + 0.75, -0.25);
+        rail2.rotation.x = pitch;
+        this.stairwellGroup.add(rail2);
+      }
+    }
+
+    // Stairwell emergency exit sign at ground door
+    const exitSign = new THREE.Mesh(
+      new THREE.PlaneGeometry(2.5, 0.65),
       new THREE.MeshBasicMaterial({
-        map: makeLabelTexture('PUESTO DEL OPERARIO', 'LPSBOX Gateway (Clic para extraer)', '#fbbf24'),
-        transparent: true,
-        side: THREE.DoubleSide
+        map: makeLabelTexture('SALIDA ESCALERA', 'Evacuación Pisos 1–4', '#34d399'),
+        transparent: true
       })
     );
-    opSign.position.set(gx, 2.25, gz);
-    this.worldShakeGroup.add(opSign);
+    exitSign.position.set(7.2, 2.75, 3.28);
+    this.stairwellGroup.add(exitSign);
+  }
 
-    // Operator Field Laptop next to the Gateway (for USB-C extraction visualization)
-    const laptopGroup = new THREE.Group();
-    laptopGroup.position.set(gx - 0.62, 0.92, gz + 0.06);
-    laptopGroup.rotation.y = 0.24;
-    const lapBase = new THREE.Mesh(
-      new THREE.BoxGeometry(0.52, 0.025, 0.36),
-      new THREE.MeshStandardMaterial({ color: 0x334155, metalness: 0.7, roughness: 0.35 })
+  _buildRooftop() {
+    // Roof slab at y = 12.8m covering building + stairwell
+    const roofSlab = new THREE.Mesh(
+      new THREE.BoxGeometry(18.0, 0.28, 8.4),
+      new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.82 })
     );
-    const lapLid = new THREE.Mesh(
-      new THREE.BoxGeometry(0.52, 0.34, 0.02),
-      new THREE.MeshStandardMaterial({ color: 0x1e293b, metalness: 0.7, roughness: 0.35 })
-    );
-    lapLid.position.set(0, 0.16, -0.17);
-    lapLid.rotation.x = -0.22;
+    roofSlab.position.set(0.1, 0.14, -0.35);
+    roofSlab.castShadow = true;
+    roofSlab.receiveShadow = true;
+    this.rooftopGroup.add(roofSlab);
 
-    this.laptopScreenCanvas = document.createElement('canvas');
-    this.laptopScreenCanvas.width = 256;
-    this.laptopScreenCanvas.height = 160;
-    this.laptopScreenTex = new THREE.CanvasTexture(this.laptopScreenCanvas);
-    this.laptopScreenTex.colorSpace = THREE.SRGBColorSpace;
-    const lapDisp = new THREE.Mesh(
-      new THREE.PlaneGeometry(0.47, 0.29),
-      new THREE.MeshBasicMaterial({ map: this.laptopScreenTex })
-    );
-    lapDisp.position.set(0, 0.16, -0.158);
-    lapDisp.rotation.x = -0.22;
-    laptopGroup.add(lapBase, lapLid, lapDisp);
-    this.worldShakeGroup.add(laptopGroup);
+    // Parapet walls
+    const paraMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.7 });
+    const pBack = new THREE.Mesh(new THREE.BoxGeometry(18.0, 0.65, 0.22), paraMat);
+    pBack.position.set(0.1, 0.58, -4.42);
+    const pLeft = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.65, 8.4), paraMat);
+    pLeft.position.set(-8.78, 0.58, -0.35);
+    const pRight = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.65, 8.4), paraMat);
+    pRight.position.set(8.98, 0.58, -0.35);
+    this.rooftopGroup.add(pBack, pLeft, pRight);
 
-    // ============ 3D LPSBOX GATEWAY (Screen-less Minimalist Dark Box w/ 3 Synced LEDs) ============
-    // Faithfully matches lpsbox_gateway_v.png + bozeto del gateway.jpg
-    this.gatewayGroup = new THREE.Group();
-    this.gatewayGroup.position.set(gx + 0.35, 0.92, gz);
-    this.gatewayGroup.rotation.y = -0.15;
+    // HVAC industrial chillers with animated fans
+    this.hvacFans = [];
+    [-5.5, -2.5].forEach((hx) => {
+      const hvac = new THREE.Mesh(
+        new THREE.BoxGeometry(1.9, 1.05, 1.4),
+        new THREE.MeshStandardMaterial({ color: 0x475569, metalness: 0.4, roughness: 0.55 })
+      );
+      hvac.position.set(hx, 0.8, -1.6);
+      hvac.castShadow = true;
+      this.rooftopGroup.add(hvac);
 
-    const absBodyMat = new THREE.MeshStandardMaterial({
-      color: 0x22262c,
-      roughness: 0.68,
-      metalness: 0.18
-    });
-    const absDarkMat = new THREE.MeshStandardMaterial({
-      color: 0x121519,
-      roughness: 0.5,
-      metalness: 0.3
+      const fan = new THREE.Mesh(
+        new THREE.BoxGeometry(0.95, 0.04, 0.18),
+        new THREE.MeshStandardMaterial({ color: 0x94a3b8, metalness: 0.7 })
+      );
+      fan.position.set(hx, 1.36, -1.6);
+      this.rooftopGroup.add(fan);
+      this.hvacFans.push(fan);
     });
 
-    // Main screen-less rectangular enclosure (0.34m x 0.42m x 0.13m scaled for clear VR/desktop visibility)
-    const gwBody = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.42, 0.13), absBodyMat);
-    gwBody.position.set(0, 0.21, 0);
-    gwBody.castShadow = true;
-    this.gatewayGroup.add(gwBody);
-    this.clickableGateway.push(gwBody);
+    // Rooftop solar backup array
+    for (let i = 0; i < 3; i++) {
+      const panel = new THREE.Mesh(
+        new THREE.BoxGeometry(1.8, 0.06, 1.2),
+        new THREE.MeshStandardMaterial({ color: 0x1d4ed8, metalness: 0.65, roughness: 0.25 })
+      );
+      panel.position.set(1.5 + i * 2.1, 0.72, -1.8);
+      panel.rotation.x = 0.35;
+      this.rooftopGroup.add(panel);
+    }
 
-    // Snap-fit lower seam groove (matching lpsbox_gateway_v.png)
-    const seam = new THREE.Mesh(new THREE.BoxGeometry(0.344, 0.008, 0.134), absDarkMat);
-    seam.position.set(0, 0.055, 0);
-    this.gatewayGroup.add(seam);
-
-    // Top-left SMA Brass Connector + Matte Black Rubber Antenna
-    const smaNut = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.024, 0.024, 0.028, 12),
-      new THREE.MeshStandardMaterial({ color: 0xb4924c, metalness: 0.85, roughness: 0.3 })
+    // Rooftop building title sign
+    const bldgSign = new THREE.Mesh(
+      new THREE.PlaneGeometry(5.6, 1.15),
+      new THREE.MeshBasicMaterial({
+        map: makeLabelTexture('CENTRO EXPERIMENTAL LPSBOX', 'Edificio Instrumentado · 4 Pisos', '#38bdf8'),
+        transparent: true
+      })
     );
-    smaNut.position.set(-0.095, 0.434, 0);
-    const antennaRod = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.013, 0.02, 0.19, 16),
-      absDarkMat
-    );
-    antennaRod.position.set(-0.095, 0.54, 0);
-    this.gatewayGroup.add(smaNut, antennaRod);
-    this.clickableGateway.push(antennaRod);
-
-    // Front recessed port bay (bottom-left: microSD + USB-C PROGRAM / EXTRACTION)
-    const portBay = new THREE.Mesh(new THREE.BoxGeometry(0.068, 0.165, 0.014), absDarkMat);
-    portBay.position.set(-0.105, 0.155, 0.061);
-    const sdSlot = new THREE.Mesh(
-      new THREE.BoxGeometry(0.012, 0.068, 0.018),
-      new THREE.MeshBasicMaterial({ color: 0x05070a })
-    );
-    sdSlot.position.set(-0.112, 0.192, 0.063);
-    const usbcProg = new THREE.Mesh(
-      new THREE.BoxGeometry(0.016, 0.042, 0.018),
-      new THREE.MeshBasicMaterial({ color: 0x05070a })
-    );
-    usbcProg.position.set(-0.112, 0.112, 0.063);
-    this.gatewayGroup.add(portBay, sdSlot, usbcProg);
-
-    // Side USB-C Power port (right face)
-    const usbcPwr = new THREE.Mesh(
-      new THREE.BoxGeometry(0.014, 0.044, 0.018),
-      new THREE.MeshBasicMaterial({ color: 0x05070a })
-    );
-    usbcPwr.position.set(0.168, 0.20, 0);
-    this.gatewayGroup.add(usbcPwr);
-
-    // Embossed "LPSBOX Gateway" front nameplate (NO SCREEN!)
-    const plaqueCanvas = document.createElement('canvas');
-    plaqueCanvas.width = 256;
-    plaqueCanvas.height = 64;
-    const pctx = plaqueCanvas.getContext('2d');
-    pctx.fillStyle = '#1b1f26';
-    pctx.fillRect(0, 0, 256, 64);
-    pctx.strokeStyle = '#323946';
-    pctx.lineWidth = 4;
-    pctx.strokeRect(4, 4, 248, 56);
-    pctx.fillStyle = '#8b9bb4';
-    pctx.font = 'bold 24px monospace';
-    pctx.textAlign = 'center';
-    pctx.fillText('LPSBOX Gateway', 128, 40);
-    const plaqueTex = new THREE.CanvasTexture(plaqueCanvas);
-    const plaque = new THREE.Mesh(
-      new THREE.PlaneGeometry(0.15, 0.038),
-      new THREE.MeshBasicMaterial({ map: plaqueTex })
-    );
-    plaque.position.set(0.005, 0.092, 0.066);
-    this.gatewayGroup.add(plaque);
-
-    // === THE 3 PHYSICAL SYNCED LEDs ON THE GATEWAY ===
-    // 1. Mini LED que titila recibiendo info (Top-Left smaller LED)
-    this.gwLedBlinkMat = new THREE.MeshStandardMaterial({
-      color: 0x1f2937,
-      emissive: 0x10b981,
-      emissiveIntensity: 0
-    });
-    const ledBlinkMesh = new THREE.Mesh(new THREE.SphereGeometry(0.009, 14, 14), this.gwLedBlinkMat);
-    ledBlinkMesh.position.set(-0.115, 0.365, 0.066);
-
-    // 2. LED Amarillo — Indica que hay información lista (Top-Center/Right larger LED)
-    this.gwLedYellowMat = new THREE.MeshStandardMaterial({
-      color: 0x1f2937,
-      emissive: 0xfbbf24,
-      emissiveIntensity: 0
-    });
-    const ledYellowMesh = new THREE.Mesh(new THREE.SphereGeometry(0.014, 16, 16), this.gwLedYellowMat);
-    ledYellowMesh.position.set(-0.045, 0.365, 0.066);
-
-    // 3. LED Azul — Indica que NO hay información aún (Lower-Right / Secondary status LED, matching lpsbox_gateway_v.png)
-    this.gwLedBlueMat = new THREE.MeshStandardMaterial({
-      color: 0x60a5fa,
-      emissive: 0x3b82f6,
-      emissiveIntensity: 2.2
-    });
-    const ledBlueMesh = new THREE.Mesh(new THREE.SphereGeometry(0.013, 16, 16), this.gwLedBlueMat);
-    ledBlueMesh.position.set(0.115, 0.094, 0.066);
-
-    this.gwGlowLight = new THREE.PointLight(0x3b82f6, 1.2, 2.2);
-    this.gwGlowLight.position.set(0, 0.26, 0.22);
-
-    this.gatewayGroup.add(ledBlinkMesh, ledYellowMesh, ledBlueMesh, this.gwGlowLight);
-
-    // Animated USB-C Cable connecting Gateway <-> Operator Laptop
-    const curve = new THREE.CatmullRomCurve3([
-      new THREE.Vector3(gx + 0.24, 1.03, gz + 0.08),
-      new THREE.Vector3(gx + 0.02, 0.93, gz + 0.25),
-      new THREE.Vector3(gx - 0.36, 0.94, gz + 0.14)
-    ]);
-    this.usbCableMat = new THREE.MeshStandardMaterial({
-      color: 0x0ea5e9,
-      emissive: 0x0284c7,
-      emissiveIntensity: 0.25,
-      roughness: 0.4
-    });
-    this.usbCableMesh = new THREE.Mesh(new THREE.TubeGeometry(curve, 24, 0.009, 8, false), this.usbCableMat);
-    this.worldShakeGroup.add(this.usbCableMesh);
-
-    this.worldShakeGroup.add(this.gatewayGroup);
+    bldgSign.position.set(-1.2, 1.25, 3.65);
+    this.rooftopGroup.add(bldgSign);
   }
 
   _buildSnifferStation() {
-    // Central Instrumentation Pillar inside building at SNIFFER_WORLD_POS (0, 1.55, -1.85)
+    // Mounted on Piso 2 (floorGroups[1], yBase = 3.2m) central structural column
+    const fg2 = this.floorGroups[1];
     const sx = SNIFFER_WORLD_POS.x;
     const sz = SNIFFER_WORLD_POS.z;
 
     const pillar = new THREE.Mesh(
-      new THREE.BoxGeometry(0.65, 2.5, 0.42),
-      new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.7 })
+      new THREE.BoxGeometry(0.82, 2.55, 0.44),
+      new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.6, metalness: 0.25 })
     );
-    pillar.position.set(sx, 1.25, sz - 0.26);
+    pillar.position.set(sx, 1.38, sz - 0.28);
     pillar.castShadow = true;
-    this.worldShakeGroup.add(pillar);
+    fg2.add(pillar);
+
+    // Raspberry Pi 5 + MPU6050 visible telemetry sub-module mounted right next to Sniffer
+    const rpiBoard = new THREE.Mesh(
+      new THREE.BoxGeometry(0.24, 0.16, 0.06),
+      new THREE.MeshStandardMaterial({ color: 0x15803d, roughness: 0.45, metalness: 0.35 })
+    );
+    rpiBoard.position.set(sx + 0.32, 1.02, sz - 0.03);
+    fg2.add(rpiBoard);
+
+    const mpuChip = new THREE.Mesh(
+      new THREE.BoxGeometry(0.08, 0.08, 0.03),
+      new THREE.MeshStandardMaterial({ color: 0x2563eb, metalness: 0.5 })
+    );
+    mpuChip.position.set(sx + 0.32, 0.86, sz - 0.02);
+    fg2.add(mpuChip);
 
     const snifferSign = new THREE.Mesh(
-      new THREE.PlaneGeometry(2.6, 0.78),
+      new THREE.PlaneGeometry(3.15, 0.84),
       new THREE.MeshBasicMaterial({
-        map: makeLabelTexture('NODO SNIFFER ESP32', 'modelo3d.stl + MPU6050', '#38bdf8'),
+        map: makeLabelTexture('SNIFFER LPSBOX · RPi 5', 'MPU6050 STA/LTA + WiFi/BLE 10s', '#38bdf8'),
         transparent: true,
         side: THREE.DoubleSide
       })
     );
-    snifferSign.position.set(sx, 2.95, sz);
-    this.worldShakeGroup.add(snifferSign);
+    snifferSign.position.set(sx, 2.52, sz + 0.18);
+    fg2.add(snifferSign);
 
     this.snifferMount = new THREE.Group();
-    // Place Sniffer base at y = 1.15m on the central pillar facing +Z
-    this.snifferMount.position.set(sx, 1.15, sz);
-    this.snifferScale = 0.82;
+    this.snifferMount.position.set(sx, 1.12, sz);
+    this.snifferScale = 0.88;
     this.snifferMount.scale.setScalar(this.snifferScale);
-    this.worldShakeGroup.add(this.snifferMount);
+    fg2.add(this.snifferMount);
 
-    // Dynamic HTML5 Canvas OLED Screen placed right on the front screen bezel of modelo3d.stl!
-    // In STL coords: X center ~ -0.025, Z ~ 0.51 (becomes Three.js Y = 0.51), -Y front ~ -0.151 (becomes Three.js Z = +0.151)
+    // EXACT RAYCAST-CALIBRATED FULL-COVERAGE OLED SCREEN FOR modelo3d.stl!
+    // STL screen frame spans X: [-0.194, +0.109] (width=0.303, center=-0.0425), Y_3d: [0.371, 0.579] (height=0.208, center=0.475)
     this.snifferOledCanvas = document.createElement('canvas');
-    this.snifferOledCanvas.width = 256;
-    this.snifferOledCanvas.height = 160;
+    this.snifferOledCanvas.width = 512;
+    this.snifferOledCanvas.height = 352;
     this.snifferOledTex = new THREE.CanvasTexture(this.snifferOledCanvas);
     this.snifferOledTex.colorSpace = THREE.SRGBColorSpace;
 
+    const bezelBacking = new THREE.Mesh(
+      new THREE.BoxGeometry(0.308, 0.212, 0.005),
+      new THREE.MeshStandardMaterial({ color: 0x070b12, roughness: 0.25, metalness: 0.45 })
+    );
+    bezelBacking.position.set(-0.0425, 0.475, 0.1496);
+    this.snifferMount.add(bezelBacking);
+
     const oledPlane = new THREE.Mesh(
-      new THREE.PlaneGeometry(0.25, 0.155),
+      new THREE.PlaneGeometry(0.304, 0.208),
       new THREE.MeshBasicMaterial({ map: this.snifferOledTex })
     );
-    oledPlane.position.set(-0.022, 0.505, 0.153);
+    oledPlane.position.set(-0.0425, 0.475, 0.1525);
     this.snifferMount.add(oledPlane);
+    this.clickableSniffer.push(oledPlane, bezelBacking);
 
-    // Status LED dot next to screen (matching bozeto del sniffer rediseño IA.jpg)
+    // Status LED dot to the right of the screen bezel (matching bozeto del sniffer rediseño IA.jpg)
     this.snifferLedMat = new THREE.MeshBasicMaterial({ color: 0x2dd4bf });
-    const snifferLed = new THREE.Mesh(new THREE.SphereGeometry(0.012, 12, 12), this.snifferLedMat);
-    snifferLed.position.set(0.145, 0.515, 0.153);
+    const snifferLed = new THREE.Mesh(new THREE.SphereGeometry(0.011, 14, 14), this.snifferLedMat);
+    snifferLed.position.set(0.136, 0.482, 0.1515);
     this.snifferMount.add(snifferLed);
 
-    // Load actual repository './modelo3d.stl' (50,000 triangles!)
     loadSharedStlGeometry(
       (geometry) => {
         const stlMat = new THREE.MeshStandardMaterial({
-          color: 0x262b33,
-          roughness: 0.55,
-          metalness: 0.25
+          color: 0x262c36,
+          roughness: 0.48,
+          metalness: 0.28
         });
         const stlMesh = new THREE.Mesh(geometry, stlMat);
-        // Rotate STL (Z-up, -Y-front) -> Three.js (Y-up, +Z-front)
         stlMesh.rotation.x = -Math.PI / 2;
         stlMesh.castShadow = true;
         stlMesh.receiveShadow = true;
@@ -732,583 +914,1469 @@ export class LPSBoxScene3D {
         this.clickableSniffer.push(stlMesh);
         if (this.cb.onStlReady) this.cb.onStlReady(geometry);
       },
-      (err) => {
-        // Fallback procedural body only if STL fails
+      () => {
         const fb = new THREE.Mesh(
           new THREE.BoxGeometry(0.58, 0.68, 0.28),
-          new THREE.MeshStandardMaterial({ color: 0x262b33 })
+          new THREE.MeshStandardMaterial({ color: 0x262c36 })
         );
-        fb.position.set(0, 0.34, 0);
+        fb.position.set(-0.02, 0.34, 0);
         this.snifferMount.add(fb);
-        if (this.cb.onStlError) this.cb.onStlError(err);
+        this.clickableSniffer.push(fb);
       }
     );
   }
 
-  _buildParticlePools() {
-    // Pool of RF Probe Request rings
-    for (let i = 0; i < 36; i++) {
-      const ring = new THREE.Mesh(
-        new THREE.RingGeometry(0.82, 1.0, 28),
-        new THREE.MeshBasicMaterial({
-          color: 0x38bdf8,
-          transparent: true,
-          opacity: 0,
-          side: THREE.DoubleSide
-        })
-      );
-      ring.rotation.x = -Math.PI / 2;
-      ring.visible = false;
-      this.worldShakeGroup.add(ring);
-      this.rfPulsePool.push(ring);
-    }
+  _buildStreetLightPoleGateway() {
+    // Outdoor Street Light Pole at POLE_WORLD_POS (7.5, 0, 9.2)
+    this.poleGroup = new THREE.Group();
+    this.poleGroup.position.set(POLE_WORLD_POS.x, 0.14, POLE_WORLD_POS.z);
+    this.worldGroup.add(this.poleGroup);
 
-    // Pool of MR Seismic Shockwave rings
-    for (let i = 0; i < 8; i++) {
-      const sw = new THREE.Mesh(
-        new THREE.RingGeometry(0.92, 1.0, 64),
-        new THREE.MeshBasicMaterial({
-          color: 0xa855f7,
-          transparent: true,
-          opacity: 0,
-          side: THREE.DoubleSide
-        })
-      );
-      sw.rotation.x = -Math.PI / 2;
-      sw.visible = false;
-      this.worldShakeGroup.add(sw);
-      this.shockwavePool.push(sw);
-    }
+    const poleSteelMat = new THREE.MeshStandardMaterial({ color: 0x475569, metalness: 0.72, roughness: 0.34 });
+    const darkEnclosureMat = new THREE.MeshStandardMaterial({ color: 0x1e242d, roughness: 0.45, metalness: 0.25 });
 
-    // Wireless RF data packets flying from Sniffer antenna -> Gateway antenna!
-    const startPt = new THREE.Vector3(SNIFFER_WORLD_POS.x + 0.13, 1.98, SNIFFER_WORLD_POS.z);
-    const midPt = new THREE.Vector3(2.2, 4.3, 3.8);
-    const endPt = new THREE.Vector3(GATEWAY_WORLD_POS.x + 0.26, 1.52, GATEWAY_WORLD_POS.z);
-    this.rfLinkCurve = new THREE.QuadraticBezierCurve3(startPt, midPt, endPt);
-
-    const curvePts = this.rfLinkCurve.getPoints(40);
-    const linkGeo = new THREE.BufferGeometry().setFromPoints(curvePts);
-    this.rfLinkLine = new THREE.Line(
-      linkGeo,
-      new THREE.LineDashedMaterial({
-        color: 0x38bdf8,
-        dashSize: 0.35,
-        gapSize: 0.22,
-        transparent: true,
-        opacity: 0.45
-      })
+    // Concrete pedestal base
+    const basePedestal = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.28, 0.36, 0.55, 8),
+      new THREE.MeshStandardMaterial({ color: 0x64748b, roughness: 0.85 })
     );
-    this.rfLinkLine.computeLineDistances();
-    this.worldShakeGroup.add(this.rfLinkLine);
+    basePedestal.position.y = 0.275;
+    basePedestal.castShadow = true;
+    this.poleGroup.add(basePedestal);
+    this.clickablePole.push(basePedestal);
 
-    for (let i = 0; i < 6; i++) {
-      const orb = new THREE.Mesh(
-        new THREE.SphereGeometry(0.065, 10, 10),
-        new THREE.MeshBasicMaterial({ color: 0xfbbf24 })
+    // Tapered street light pole shaft (7.4m tall)
+    const poleShaft = new THREE.Mesh(new THREE.CylinderGeometry(0.095, 0.165, 7.1, 16), poleSteelMat);
+    poleShaft.position.y = 3.8;
+    poleShaft.castShadow = true;
+    this.poleGroup.add(poleShaft);
+    this.clickablePole.push(poleShaft);
+
+    // Curved luminaire arm + warm LED streetlamp head
+    const lampArm = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.065, 2.0, 12), poleSteelMat);
+    lampArm.position.set(-0.82, 7.22, 0);
+    lampArm.rotation.z = Math.PI * 0.4;
+    this.poleGroup.add(lampArm);
+
+    const lampHead = new THREE.Mesh(
+      new THREE.BoxGeometry(0.68, 0.14, 0.34),
+      new THREE.MeshStandardMaterial({ color: 0x1e293b, metalness: 0.6 })
+    );
+    lampHead.position.set(-1.72, 7.42, 0);
+    this.poleGroup.add(lampHead);
+
+    const lampDiffuser = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.56, 0.26),
+      new THREE.MeshBasicMaterial({ color: 0xfef08a })
+    );
+    lampDiffuser.rotation.x = Math.PI / 2;
+    lampDiffuser.position.set(-1.72, 7.34, 0);
+    this.poleGroup.add(lampDiffuser);
+
+    // Translucent volumetric streetlamp light cone
+    const coneGeo = new THREE.ConeGeometry(3.2, 7.2, 24, 1, true);
+    const coneMat = new THREE.MeshBasicMaterial({
+      color: 0xfef08a,
+      transparent: true,
+      opacity: 0.055,
+      side: THREE.DoubleSide,
+      depthWrite: false
+    });
+    const lightCone = new THREE.Mesh(coneGeo, coneMat);
+    lightCone.position.set(-1.72, 3.7, 0);
+    this.poleGroup.add(lightCone);
+
+    this.streetLampLight = new THREE.PointLight(0xfef3c7, 1.9, 18);
+    this.streetLampLight.position.set(-1.72, 7.05, 0);
+    this.poleGroup.add(this.streetLampLight);
+
+    // Service Hoist Guide Rail + Top Pulley + Hand Winch Box on Pole
+    const guideRail = new THREE.Mesh(
+      new THREE.BoxGeometry(0.05, 4.55, 0.06),
+      new THREE.MeshStandardMaterial({ color: 0x94a3b8, metalness: 0.8, roughness: 0.25 })
+    );
+    guideRail.position.set(-0.18, 3.15, 0);
+    this.poleGroup.add(guideRail);
+
+    const topPulley = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.11, 0.11, 0.07, 16),
+      new THREE.MeshStandardMaterial({ color: 0xf59e0b, metalness: 0.6 })
+    );
+    topPulley.rotation.x = Math.PI / 2;
+    topPulley.position.set(-0.24, 5.42, 0);
+    this.poleGroup.add(topPulley);
+
+    // Winch control box at operator waist height on right side of pole
+    const winchBox = new THREE.Mesh(
+      new THREE.BoxGeometry(0.24, 0.34, 0.24),
+      new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.45, metalness: 0.35 })
+    );
+    winchBox.position.set(0.2, 1.25, 0.08);
+    this.poleGroup.add(winchBox);
+    this.clickablePole.push(winchBox);
+
+    this.winchCrank = new THREE.Mesh(
+      new THREE.BoxGeometry(0.04, 0.24, 0.04),
+      new THREE.MeshStandardMaterial({ color: 0xf8fafc, metalness: 0.8 })
+    );
+    this.winchCrank.position.set(0.2, 1.25, 0.23);
+    this.poleGroup.add(this.winchCrank);
+    this.clickablePole.push(this.winchCrank);
+
+    // Dynamic hoist steel cable stretching from pulley (y=5.42) down to gatewayCarriageGroup
+    this.hoistCable = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.012, 0.012, 1.0, 8),
+      new THREE.MeshStandardMaterial({ color: 0xcbd5e1, metalness: 0.85 })
+    );
+    this.poleGroup.add(this.hoistCable);
+
+    // Operator Field Tripod / Rugged Terminal Stand waiting beside the pole!
+    const tripodTop = new THREE.Mesh(
+      new THREE.BoxGeometry(0.75, 0.06, 0.52),
+      new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.6 })
+    );
+    tripodTop.position.set(-1.22, 0.96, 0.15);
+    this.poleGroup.add(tripodTop);
+
+    const tripodLeg = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.16, 0.94, 10), poleSteelMat);
+    tripodLeg.position.set(-1.22, 0.47, 0.15);
+    this.poleGroup.add(tripodLeg);
+
+    // Field rugged laptop on tripod
+    const laptopBase = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.03, 0.3), darkEnclosureMat);
+    laptopBase.position.set(-1.22, 1.01, 0.18);
+    const laptopScreen = new THREE.Mesh(
+      new THREE.BoxGeometry(0.42, 0.28, 0.025),
+      new THREE.MeshBasicMaterial({ color: 0x0ea5e9 })
+    );
+    laptopScreen.position.set(-1.22, 1.15, 0.04);
+    laptopScreen.rotation.x = 0.22;
+    this.poleGroup.add(laptopBase, laptopScreen);
+    this.clickableGateway.push(laptopBase, laptopScreen);
+
+    // USB-C Extraction cable (visible ONLY when Gateway is lowered to operator height!)
+    const cablePts = [
+      new THREE.Vector3(-0.36, GATEWAY_HEIGHT_DOWN - 0.12, 0.16),
+      new THREE.Vector3(-0.75, 0.92, 0.28),
+      new THREE.Vector3(-1.02, 1.01, 0.18)
+    ];
+    this.usbExtractionCable = new THREE.Mesh(
+      new THREE.TubeGeometry(new THREE.CatmullRomCurve3(cablePts), 16, 0.014, 8, false),
+      new THREE.MeshBasicMaterial({ color: 0x38bdf8 })
+    );
+    this.usbExtractionCable.visible = false;
+    this.poleGroup.add(this.usbExtractionCable);
+
+    // MOVABLE CARRIAGE CARRYING THE SCREEN-LESS LPSBOX GATEWAY (3 PHYSICAL LEDs)
+    this.gatewayCarriageGroup = new THREE.Group();
+    this.gatewayCarriageGroup.position.set(-0.36, GATEWAY_HEIGHT_UP, 0);
+    this.poleGroup.add(this.gatewayCarriageGroup);
+
+    const bracket = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.12, 0.16), poleSteelMat);
+    bracket.position.set(0.18, 0.02, 0);
+    this.gatewayCarriageGroup.add(bracket);
+
+    // Minimalist 3D-printed dark screen-less LPSBOX Gateway box
+    const gwShell = new THREE.Mesh(
+      new THREE.BoxGeometry(0.38, 0.44, 0.24),
+      new THREE.MeshStandardMaterial({ color: 0x222832, roughness: 0.46, metalness: 0.24 })
+    );
+    gwShell.castShadow = true;
+    this.gatewayCarriageGroup.add(gwShell);
+    this.clickableGateway.push(gwShell);
+    this.clickablePole.push(gwShell);
+
+    const gwSeam = new THREE.Mesh(
+      new THREE.BoxGeometry(0.388, 0.012, 0.248),
+      new THREE.MeshBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.45 })
+    );
+    gwSeam.position.y = 0.08;
+    this.gatewayCarriageGroup.add(gwSeam);
+
+    // Top-left SMA antenna on Gateway
+    const gwAnt = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.01, 0.018, 0.28, 12),
+      new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.35 })
+    );
+    gwAnt.position.set(-0.11, 0.36, -0.02);
+    this.gatewayCarriageGroup.add(gwAnt);
+
+    // Front USB-C + microSD recess
+    const gwPortRecess = new THREE.Mesh(
+      new THREE.BoxGeometry(0.18, 0.06, 0.02),
+      new THREE.MeshStandardMaterial({ color: 0x090d16 })
+    );
+    gwPortRecess.position.set(0.05, -0.14, 0.118);
+    this.gatewayCarriageGroup.add(gwPortRecess);
+
+    // THE 3 PHYSICAL GATEWAY LEDS (Blue = No Info, Mini Blink = RX, Yellow = Data Ready t0)
+    const ledGeo = new THREE.SphereGeometry(0.024, 16, 16);
+    const miniGeo = new THREE.SphereGeometry(0.017, 14, 14);
+
+    this.gwMatBlue = new THREE.MeshBasicMaterial({ color: 0x3b82f6 });
+    this.gwMatBlink = new THREE.MeshBasicMaterial({ color: 0x1e293b });
+    this.gwMatYellow = new THREE.MeshBasicMaterial({ color: 0x2a2415 });
+
+    const meshBlue = new THREE.Mesh(ledGeo, this.gwMatBlue);
+    meshBlue.position.set(-0.1, 0.13, 0.122);
+    const meshBlink = new THREE.Mesh(miniGeo, this.gwMatBlink);
+    meshBlink.position.set(-0.01, 0.13, 0.122);
+    const meshYellow = new THREE.Mesh(ledGeo, this.gwMatYellow);
+    meshYellow.position.set(0.09, 0.13, 0.122);
+    this.gatewayCarriageGroup.add(meshBlue, meshBlink, meshYellow);
+
+    this.gwGlowLight = new THREE.PointLight(0x3b82f6, 1.3, 4.0);
+    this.gwGlowLight.position.set(0, 0.14, 0.35);
+    this.gatewayCarriageGroup.add(this.gwGlowLight);
+
+    // Dynamic floating callout label next to Gateway on Pole
+    this.poleSignCanvas = document.createElement('canvas');
+    this.poleSignCanvas.width = 512;
+    this.poleSignCanvas.height = 148;
+    this.poleSignTex = new THREE.CanvasTexture(this.poleSignCanvas);
+    this.poleSignTex.colorSpace = THREE.SRGBColorSpace;
+    this._lastPoleSignState = '';
+
+    const poleSignMesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(3.2, 0.92),
+      new THREE.MeshBasicMaterial({ map: this.poleSignTex, transparent: true, side: THREE.DoubleSide })
+    );
+    poleSignMesh.position.set(0, 0.58, 0);
+    this.gatewayCarriageGroup.add(poleSignMesh);
+    this.clickablePole.push(poleSignMesh);
+  }
+
+  _updatePoleSignTexture() {
+    const key = `${this.sim.gatewayPoleState}-${this.sim.gatewayLeds.yellow ? 'Y' : 'B'}`;
+    if (key === this._lastPoleSignState) return;
+    this._lastPoleSignState = key;
+
+    const ctx = this.poleSignCanvas.getContext('2d');
+    ctx.clearRect(0, 0, 512, 148);
+
+    let title = 'GATEWAY EN POSTE (4.65 m)';
+    let sub = '🪜 Clic aquí o [B] para BAJAR del poste';
+    let color = this.sim.gatewayLeds.yellow ? '#fbbf24' : '#38bdf8';
+
+    if (this.sim.gatewayPoleState === 'lowering') {
+      title = 'DESCENDIENDO GATEWAY...';
+      sub = 'Polea de servicio en movimiento';
+      color = '#fbbf24';
+    } else if (this.sim.gatewayPoleState === 'raising') {
+      title = 'IZANDO GATEWAY AL POSTE...';
+      sub = 'Subiendo a posición segura (4.65 m)';
+      color = '#38bdf8';
+    } else if (this.sim.gatewayPoleState === 'down') {
+      title = 'GATEWAY ABAJO (1.18 m)';
+      sub = '🔌 Clic para Extraer Datos USB-C';
+      color = '#34d399';
+    }
+
+    ctx.fillStyle = 'rgba(8, 14, 26, 0.92)';
+    drawRoundRectPath(ctx, 6, 6, 500, 136, 18);
+    ctx.fill();
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = color;
+    drawRoundRectPath(ctx, 6, 6, 500, 136, 18);
+    ctx.stroke();
+
+    ctx.fillStyle = '#f8fafc';
+    ctx.font = 'bold 28px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(title, 256, 60);
+
+    ctx.fillStyle = color;
+    ctx.font = 'bold 21px monospace';
+    ctx.fillText(sub, 256, 108);
+    this.poleSignTex.needsUpdate = true;
+  }
+
+  // ================= DYNAMIC FALLING, SWAYING & TOPPLING PROPS =================
+  _buildDynamicPropsAcrossFloors() {
+    const lampShadeMat = new THREE.MeshStandardMaterial({
+      color: 0x334155,
+      emissive: 0xfef3c7,
+      emissiveIntensity: 0.55,
+      roughness: 0.4
+    });
+    const shelfMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, metalness: 0.4, roughness: 0.6 });
+    const rackMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, metalness: 0.6, roughness: 0.35 });
+    const boxColors = [0xf97316, 0x38bdf8, 0xfbbf24, 0xa855f7, 0xef4444, 0x10b981];
+    const tileMat = new THREE.MeshStandardMaterial({ color: 0xcbd5e1, roughness: 0.85 });
+
+    for (let f = 0; f < 4; f++) {
+      const fg = this.floorGroups[f];
+      const floorFactor = 1.0 + f * 0.24; // Higher floors experience stronger structural whip
+
+      // 1. Hanging Ceiling Lamps (3 per floor = 12 total; some snap & fall in major quake!)
+      [-5.8, -1.6, 2.5].forEach((lx, idx) => {
+        const pivot = new THREE.Group();
+        pivot.position.set(lx, FLOOR_HEIGHT - 0.08, -0.3 + (idx - 1) * 0.6);
+
+        const cord = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.012, 0.012, 0.55, 6),
+          new THREE.MeshBasicMaterial({ color: 0x94a3b8 })
+        );
+        cord.position.y = -0.275;
+        pivot.add(cord);
+
+        const fixture = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.09, 0.28), lampShadeMat.clone());
+        fixture.position.y = -0.56;
+        fixture.castShadow = true;
+        pivot.add(fixture);
+
+        fg.add(pivot);
+
+        const willSnap = (f >= 2 && idx !== 1) || (f === 1 && idx === 2);
+        this.dynamicProps.push({
+          kind: 'lamp',
+          floor: f,
+          floorFactor,
+          mesh: pivot,
+          fixture,
+          homePos: pivot.position.clone(),
+          angleX: 0,
+          angleZ: 0,
+          velX: 0,
+          velZ: 0,
+          snapped: false,
+          willSnap,
+          snapTime: 3.6 + f * 1.4 + idx * 2.1,
+          vy: 0,
+          fallen: false
+        });
+      });
+
+      // 2. Tall Bookcases / Server Racks / Storage Shelves (2 per floor = 8 total; rock & topple!)
+      [[-7.8, -2.6, 1], [4.4, -2.7, -1]].forEach(([sx, sz, fallDir], sIdx) => {
+        const pivot = new THREE.Group();
+        pivot.position.set(sx, 0.22, sz);
+
+        const h = f === 2 ? 2.15 : 1.95;
+        const body = new THREE.Mesh(
+          new THREE.BoxGeometry(1.15, h, 0.46),
+          f === 2 ? rackMat : shelfMat
+        );
+        body.position.y = h / 2;
+        body.castShadow = true;
+        pivot.add(body);
+
+        // Decorative LEDs or shelf books
+        for (let r = 0; r < 3; r++) {
+          const bar = new THREE.Mesh(
+            new THREE.BoxGeometry(0.92, 0.14, 0.48),
+            new THREE.MeshBasicMaterial({ color: boxColors[(f + r + sIdx) % boxColors.length] })
+          );
+          bar.position.y = 0.45 + r * 0.56;
+          pivot.add(bar);
+        }
+
+        fg.add(pivot);
+
+        const canTopple = f >= 1 && (sIdx === 0 || f >= 2);
+        this.dynamicProps.push({
+          kind: 'shelf',
+          floor: f,
+          floorFactor,
+          mesh: pivot,
+          homePos: pivot.position.clone(),
+          fallDir,
+          tiltZ: 0,
+          angVel: 0,
+          toppled: false,
+          canTopple,
+          toppleTime: 4.1 + f * 1.65 + sIdx * 2.8
+        });
+      });
+
+      // 3. Small Falling Items on Desks/Tables/Shelves (Monitors, Boxes, Coffee Mugs, Potted Plants — 5 per floor = 20 total!)
+      const itemDefs = [
+        { x: -5.9, y: 1.06, z: -1.5, w: 0.44, h: 0.32, d: 0.08, col: 0x0ea5e9, mildFall: false }, // Monitor
+        { x: 2.3, y: 1.06, z: 1.15, w: 0.42, h: 0.3, d: 0.08, col: 0x38bdf8, mildFall: false },   // Monitor
+        { x: -7.5, y: 2.18, z: -2.45, w: 0.28, h: 0.24, d: 0.26, col: 0xf97316, mildFall: f >= 2 }, // High shelf box (falls even in mild quake on upper floors!)
+        { x: 4.2, y: 2.18, z: -2.55, w: 0.25, h: 0.22, d: 0.24, col: 0xfbbf24, mildFall: f >= 3 }, // High shelf crate
+        { x: -2.1, y: 1.02, z: 1.15, w: 0.18, h: 0.22, d: 0.18, col: 0x34d399, mildFall: f === 3 }  // Plant / cup
+      ];
+      itemDefs.forEach((it, iIdx) => {
+        const m = new THREE.Mesh(
+          new THREE.BoxGeometry(it.w, it.h, it.d),
+          new THREE.MeshStandardMaterial({ color: it.col, roughness: 0.5 })
+        );
+        m.position.set(it.x, it.y, it.z);
+        m.castShadow = true;
+        fg.add(m);
+
+        this.dynamicProps.push({
+          kind: 'item',
+          floor: f,
+          floorFactor,
+          mesh: m,
+          homePos: m.position.clone(),
+          mildFall: it.mildFall,
+          dislodged: false,
+          mildTriggerTime: 3.2 + iIdx * 1.3,
+          majorTriggerTime: 1.8 + f * 0.55 + iIdx * 1.65,
+          vx: (iIdx % 2 === 0 ? 1 : -1) * (0.65 + (iIdx % 3) * 0.35),
+          vy: 0.4,
+          vz: 0.75 + (iIdx % 2) * 0.45,
+          rx: (iIdx % 2 === 0 ? 3.2 : -2.8),
+          rz: 2.4,
+          landed: false
+        });
+      });
+
+      // 4. Wall Whiteboards / Framed Displays (tilt crooked in mild quake, unhook & fall in major quake!)
+      const frameMesh = new THREE.Mesh(
+        new THREE.BoxGeometry(1.55, 0.85, 0.05),
+        new THREE.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 0.35 })
       );
-      this.worldShakeGroup.add(orb);
-      this.snifferBeamParticles.push({ mesh: orb, t: i / 6 });
+      frameMesh.position.set(-3.4 + f * 1.1, 1.85, -4.22);
+      fg.add(frameMesh);
+      this.dynamicProps.push({
+        kind: 'wall_frame',
+        floor: f,
+        floorFactor,
+        mesh: frameMesh,
+        homePos: frameMesh.position.clone(),
+        tilted: false,
+        fallen: false,
+        fallTime: 5.5 + f * 2.1,
+        vy: 0
+      });
+
+      // 5. Detaching Ceiling Panels / Debris slabs during major quake
+      if (f >= 1) {
+        [-4.2, 0.8, 3.2].forEach((tx, tIdx) => {
+          const tile = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.05, 0.65), tileMat);
+          tile.position.set(tx, FLOOR_HEIGHT - 0.14, -0.8 + tIdx * 1.2);
+          fg.add(tile);
+          this.dynamicProps.push({
+            kind: 'ceiling_tile',
+            floor: f,
+            floorFactor,
+            mesh: tile,
+            homePos: tile.position.clone(),
+            detached: false,
+            detachTime: 3.2 + f * 1.2 + tIdx * 3.1,
+            vy: 0,
+            rx: 1.8 + tIdx,
+            rz: -1.5,
+            landed: false
+          });
+        });
+      }
     }
   }
 
+  resetDynamicProps() {
+    this.dynamicProps.forEach((p) => {
+      p.mesh.position.copy(p.homePos);
+      p.mesh.rotation.set(0, 0, 0);
+      if (p.kind === 'lamp') {
+        p.angleX = 0;
+        p.angleZ = 0;
+        p.velX = 0;
+        p.velZ = 0;
+        p.snapped = false;
+        p.vy = 0;
+        p.fallen = false;
+        if (p.fixture?.material) p.fixture.material.emissiveIntensity = 0.55;
+      } else if (p.kind === 'shelf') {
+        p.tiltZ = 0;
+        p.angVel = 0;
+        p.toppled = false;
+      } else if (p.kind === 'item') {
+        p.dislodged = false;
+        p.landed = false;
+        p.vy = 0.4;
+      } else if (p.kind === 'wall_frame') {
+        p.tilted = false;
+        p.fallen = false;
+        p.vy = 0;
+      } else if (p.kind === 'ceiling_tile') {
+        p.detached = false;
+        p.landed = false;
+        p.vy = 0;
+      }
+    });
+  }
+
+  _spawnDustPuff(worldX, worldY, worldZ, scale = 1.0) {
+    for (let i = 0; i < 6; i++) {
+      const puff = this.dustPool.find((d) => !d.visible);
+      if (!puff) break;
+      puff.visible = true;
+      puff.position.set(
+        worldX + (Math.random() - 0.5) * 0.9,
+        worldY + 0.15 + Math.random() * 0.25,
+        worldZ + (Math.random() - 0.5) * 0.7
+      );
+      puff.scale.setScalar(0.25 * scale);
+      puff.userData.life = 1.0;
+      puff.userData.vx = (Math.random() - 0.5) * 1.2;
+      puff.userData.vy = 0.45 + Math.random() * 0.7;
+      puff.userData.vz = (Math.random() - 0.5) * 1.2;
+    }
+  }
+
+  _spawnElectricSparks(worldX, worldY, worldZ) {
+    for (let i = 0; i < 8; i++) {
+      const sp = this.sparkPool.find((s) => !s.visible);
+      if (!sp) break;
+      sp.visible = true;
+      sp.position.set(worldX, worldY, worldZ);
+      sp.userData.life = 0.45 + Math.random() * 0.25;
+      sp.userData.vx = (Math.random() - 0.5) * 4.5;
+      sp.userData.vy = 1.2 + Math.random() * 2.8;
+      sp.userData.vz = (Math.random() - 0.5) * 4.5;
+    }
+    if (this._crashSoundCooldown <= 0 && this.cb.onElectricSpark) {
+      this.cb.onElectricSpark();
+    }
+  }
+
+  _emitCrashAudio(intensity) {
+    if (this._crashSoundCooldown <= 0) {
+      this._crashSoundCooldown = 0.24;
+      if (this.cb.onPropImpact) this.cb.onPropImpact(intensity);
+    }
+  }
+
+  _updateDynamicProps(dt) {
+    if (this._crashSoundCooldown > 0) this._crashSoundCooldown -= dt;
+
+    const gX = this.sim.accel.x;
+    const gZ = this.sim.accel.y;
+    const dynG = this.sim.accel.dynamicG;
+    const qActive = this.sim.quakeActive;
+    const qTime = this.sim.quakeElapsed;
+    const isMajor = this.sim.scenario === 'major';
+    const isMild = this.sim.scenario === 'mild';
+
+    this.dynamicProps.forEach((p) => {
+      const fBaseY = p.floor * FLOOR_HEIGHT;
+
+      if (p.kind === 'lamp') {
+        if (!p.snapped) {
+          // Driven damped pendulum!
+          const driveX = -gX * 16.0 * p.floorFactor;
+          const driveZ = -gZ * 16.0 * p.floorFactor;
+          p.velZ += (driveX - 14.0 * Math.sin(p.angleZ) - 1.65 * p.velZ) * dt;
+          p.velX += (driveZ - 14.0 * Math.sin(p.angleX) - 1.65 * p.velX) * dt;
+          p.angleZ = Math.max(-0.78, Math.min(0.78, p.angleZ + p.velZ * dt));
+          p.angleX = Math.max(-0.78, Math.min(0.78, p.angleX + p.velX * dt));
+          p.mesh.rotation.z = p.angleZ;
+          p.mesh.rotation.x = p.angleX;
+
+          // Flicker light intensity during strong shaking
+          if (p.fixture?.material) {
+            p.fixture.material.emissiveIntensity =
+              dynG > 0.08 ? (Math.random() > 0.35 ? 0.75 : 0.12) : 0.55;
+          }
+
+          if (qActive && isMajor && p.willSnap && qTime >= p.snapTime) {
+            p.snapped = true;
+            p.vy = -0.5;
+            this._spawnElectricSparks(p.mesh.position.x, fBaseY + p.mesh.position.y, p.mesh.position.z);
+          }
+        } else if (!p.fallen) {
+          p.vy -= 9.8 * dt;
+          p.mesh.position.y += p.vy * dt;
+          p.mesh.rotation.z += 2.6 * dt;
+          if (p.mesh.position.y <= 0.68) {
+            p.mesh.position.y = 0.68;
+            p.fallen = true;
+            if (p.fixture?.material) p.fixture.material.emissiveIntensity = 0.0;
+            this._spawnDustPuff(p.mesh.position.x, fBaseY + 0.25, p.mesh.position.z, 0.9);
+            this._emitCrashAudio(0.65);
+          }
+        }
+      } else if (p.kind === 'shelf') {
+        if (!p.toppled) {
+          if (qActive && isMajor && p.canTopple && qTime >= p.toppleTime) {
+            p.angVel += p.fallDir * 4.8 * dt;
+            p.tiltZ += p.angVel * dt;
+            if (Math.abs(p.tiltZ) >= Math.PI * 0.47) {
+              p.tiltZ = p.fallDir * Math.PI * 0.47;
+              p.toppled = true;
+              this._spawnDustPuff(
+                p.mesh.position.x + p.fallDir * 0.9,
+                fBaseY + 0.3,
+                p.mesh.position.z,
+                1.45
+              );
+              this._emitCrashAudio(0.95);
+            }
+            p.mesh.rotation.z = -p.tiltZ;
+          } else {
+            // Rocking oscillation during mild or early major shaking
+            const rockAmp = Math.min(0.16, dynG * 0.32 * p.floorFactor);
+            p.mesh.rotation.z = Math.sin(this.sim.time * 15 + p.floor * 2.1) * rockAmp;
+          }
+        }
+      } else if (p.kind === 'item') {
+        if (!p.dislodged) {
+          // Subtle rattle on desk/shelf
+          if (dynG > 0.025) {
+            p.mesh.position.x = p.homePos.x + Math.sin(this.sim.time * 28 + p.floor) * dynG * 0.08;
+          }
+          const triggerMild = qActive && isMild && p.mildFall && qTime >= p.mildTriggerTime;
+          const triggerMajor = qActive && isMajor && qTime >= p.majorTriggerTime;
+          const triggerHit = this.sim.tableShockTimer > 0.35 && p.mildFall;
+          if (triggerMild || triggerMajor || triggerHit) {
+            p.dislodged = true;
+            p.vy = 0.55;
+          }
+        } else if (!p.landed) {
+          p.vy -= 9.8 * dt;
+          p.mesh.position.x += p.vx * dt;
+          p.mesh.position.y += p.vy * dt;
+          p.mesh.position.z += p.vz * dt;
+          p.mesh.rotation.x += p.rx * dt;
+          p.mesh.rotation.z += p.rz * dt;
+          if (p.mesh.position.y <= 0.34) {
+            p.mesh.position.y = 0.34;
+            if (Math.abs(p.vy) > 1.8) {
+              p.vy = -p.vy * 0.28;
+              p.vx *= 0.45;
+              p.vz *= 0.45;
+              this._emitCrashAudio(0.42);
+            } else {
+              p.landed = true;
+            }
+          }
+        }
+      } else if (p.kind === 'wall_frame') {
+        if (!p.fallen) {
+          if (qActive && (isMild || isMajor) && qTime > 2.0) {
+            p.tilted = true;
+          }
+          if (p.tilted) {
+            p.mesh.rotation.z = 0.28 + Math.sin(this.sim.time * 10) * Math.min(0.12, dynG * 0.25);
+          }
+          if (qActive && isMajor && qTime >= p.fallTime) {
+            p.vy -= 9.8 * dt;
+            p.mesh.position.y += p.vy * dt;
+            p.mesh.position.z += 0.35 * dt;
+            p.mesh.rotation.x += 2.2 * dt;
+            if (p.mesh.position.y <= 0.3) {
+              p.mesh.position.y = 0.3;
+              p.mesh.rotation.x = Math.PI / 2;
+              p.fallen = true;
+              this._emitCrashAudio(0.5);
+            }
+          }
+        }
+      } else if (p.kind === 'ceiling_tile') {
+        if (!p.detached) {
+          if (qActive && isMajor && qTime >= p.detachTime) {
+            p.detached = true;
+            p.vy = -0.3;
+          }
+        } else if (!p.landed) {
+          p.vy -= 7.8 * dt;
+          p.mesh.position.y += p.vy * dt;
+          p.mesh.rotation.x += p.rx * dt;
+          p.mesh.rotation.z += p.rz * dt;
+          if (p.mesh.position.y <= 0.26) {
+            p.mesh.position.y = 0.26;
+            p.mesh.rotation.set(0, 0.4, 0.08);
+            p.landed = true;
+            this._spawnDustPuff(p.mesh.position.x, fBaseY + 0.24, p.mesh.position.z, 0.85);
+            this._emitCrashAudio(0.55);
+          }
+        }
+      }
+    });
+  }
+
+  _buildParticlePools() {
+    // RF Probe Request ring pool
+    this.rfRingPool = [];
+    const rfGeo = new THREE.RingGeometry(0.84, 1.0, 24);
+    rfGeo.rotateX(-Math.PI / 2);
+    for (let i = 0; i < 42; i++) {
+      const mat = new THREE.MeshBasicMaterial({
+        color: 0x38bdf8,
+        transparent: true,
+        opacity: 0,
+        side: THREE.DoubleSide
+      });
+      const mesh = new THREE.Mesh(rfGeo, mat);
+      mesh.visible = false;
+      this.buildingGroup.add(mesh);
+      this.rfRingPool.push(mesh);
+    }
+
+    // Seismic / MR Shockwave ring pool
+    this.shockPool = [];
+    const swGeo = new THREE.RingGeometry(0.92, 1.0, 48);
+    swGeo.rotateX(-Math.PI / 2);
+    for (let i = 0; i < 8; i++) {
+      const mat = new THREE.MeshBasicMaterial({
+        color: 0xa855f7,
+        transparent: true,
+        opacity: 0,
+        side: THREE.DoubleSide
+      });
+      const mesh = new THREE.Mesh(swGeo, mat);
+      mesh.visible = false;
+      this.worldGroup.add(mesh);
+      this.shockPool.push(mesh);
+    }
+
+    // Dust cloud puff pool
+    this.dustPool = [];
+    const dustGeo = new THREE.SphereGeometry(0.42, 8, 8);
+    for (let i = 0; i < 28; i++) {
+      const mat = new THREE.MeshBasicMaterial({
+        color: 0x94a3b8,
+        transparent: true,
+        opacity: 0.45,
+        depthWrite: false
+      });
+      const m = new THREE.Mesh(dustGeo, mat);
+      m.visible = false;
+      m.userData = { life: 0, vx: 0, vy: 0, vz: 0 };
+      this.worldGroup.add(m);
+      this.dustPool.push(m);
+    }
+
+    // Electrical spark pool
+    this.sparkPool = [];
+    const sparkGeo = new THREE.BoxGeometry(0.06, 0.06, 0.14);
+    for (let i = 0; i < 24; i++) {
+      const m = new THREE.Mesh(
+        sparkGeo,
+        new THREE.MeshBasicMaterial({ color: i % 2 === 0 ? 0xfbbf24 : 0x38bdf8 })
+      );
+      m.visible = false;
+      m.userData = { life: 0, vx: 0, vy: 0, vz: 0 };
+      this.worldGroup.add(m);
+      this.sparkPool.push(m);
+    }
+
+    // Wireless telemetry beam from Piso 2 Sniffer RPi5 -> Outdoor Street Light Pole Gateway!
+    const initPts = [
+      new THREE.Vector3(SNIFFER_WORLD_POS.x, SNIFFER_WORLD_POS.y + 0.5, SNIFFER_WORLD_POS.z),
+      new THREE.Vector3(3.2, 7.6, 3.0),
+      new THREE.Vector3(POLE_WORLD_POS.x - 0.36, GATEWAY_HEIGHT_UP + 0.25, POLE_WORLD_POS.z)
+    ];
+    this.linkLineGeo = new THREE.BufferGeometry().setFromPoints(
+      new THREE.CatmullRomCurve3(initPts).getPoints(36)
+    );
+    this.linkLineMat = new THREE.LineDashedMaterial({
+      color: 0x38bdf8,
+      dashSize: 0.45,
+      gapSize: 0.24,
+      transparent: true,
+      opacity: 0.65
+    });
+    this.snifferGatewayBeam = new THREE.Line(this.linkLineGeo, this.linkLineMat);
+    this.snifferGatewayBeam.computeLineDistances();
+    this.worldGroup.add(this.snifferGatewayBeam);
+  }
+
+  // ================= ARTICULATED NPC MODELS + SPEECH BUBBLES =================
   _createPersonMesh(person) {
     const group = new THREE.Group();
 
-    const bodyMat = new THREE.MeshStandardMaterial({ color: person.color, roughness: 0.6 });
-    const pantsMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.8 });
-    const skinMat = new THREE.MeshStandardMaterial({ color: 0xf1c27d, roughness: 0.65 });
+    const skinMat = new THREE.MeshStandardMaterial({ color: person.skinColor, roughness: 0.62 });
+    const shirtMat = new THREE.MeshStandardMaterial({
+      color: person.hasLabCoat ? '#f1f5f9' : person.color,
+      roughness: 0.55
+    });
+    const accentMat = new THREE.MeshStandardMaterial({ color: person.color, roughness: 0.5 });
+    const pantsMat = new THREE.MeshStandardMaterial({ color: person.pantsColor, roughness: 0.78 });
+    const shoeMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.85 });
 
-    const torso = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.52, 0.2), bodyMat);
-    torso.position.y = 0.96;
+    // Body root so crouch/kneel lowers smoothly
+    const bodyRoot = new THREE.Group();
+    group.add(bodyRoot);
+
+    // Pelvis / Hips
+    const pelvis = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.16, 0.21), pantsMat);
+    pelvis.position.y = 0.76;
+    bodyRoot.add(pelvis);
+
+    // Articulated Left & Right Legs + Shoes
+    const makeLeg = (xOff) => {
+      const hip = new THREE.Group();
+      hip.position.set(xOff, 0.74, 0);
+      const thigh = new THREE.Mesh(new THREE.CylinderGeometry(0.072, 0.06, 0.68, 10), pantsMat);
+      thigh.position.y = -0.34;
+      thigh.castShadow = true;
+      hip.add(thigh);
+      const shoe = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.08, 0.22), shoeMat);
+      shoe.position.set(0, -0.68, 0.04);
+      hip.add(shoe);
+      bodyRoot.add(hip);
+      return hip;
+    };
+    const legL = makeLeg(-0.095);
+    const legR = makeLeg(0.095);
+
+    // Upper Torso + Collar + ID Badge
+    const torso = new THREE.Mesh(new THREE.BoxGeometry(0.37, 0.48, 0.22), shirtMat);
+    torso.position.y = 1.07;
     torso.castShadow = true;
+    bodyRoot.add(torso);
 
-    const head = new THREE.Mesh(new THREE.SphereGeometry(0.145, 14, 14), skinMat);
-    head.position.y = 1.38;
+    const badge = new THREE.Mesh(new THREE.PlaneGeometry(0.07, 0.09), accentMat);
+    badge.position.set(0.09, 1.13, 0.115);
+    bodyRoot.add(badge);
+
+    // Neck & Head Group
+    const headGroup = new THREE.Group();
+    headGroup.position.set(0, 1.44, 0);
+    bodyRoot.add(headGroup);
+
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.155, 16, 16), skinMat);
     head.castShadow = true;
+    headGroup.add(head);
 
-    const legL = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.65, 0.14), pantsMat);
-    legL.position.set(-0.09, 0.35, 0);
-    const legR = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.65, 0.14), pantsMat);
-    legR.position.set(0.09, 0.35, 0);
+    // Eyes facing +Z
+    const eyeMat = new THREE.MeshBasicMaterial({ color: 0x0f172a });
+    const eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.02, 8, 8), eyeMat);
+    eyeL.position.set(-0.052, 0.02, 0.142);
+    const eyeR = new THREE.Mesh(new THREE.SphereGeometry(0.02, 8, 8), eyeMat);
+    eyeR.position.set(0.052, 0.02, 0.142);
+    headGroup.add(eyeL, eyeR);
 
-    const armL = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.46, 0.1), bodyMat);
-    armL.position.set(-0.23, 0.96, 0);
-    const armR = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.46, 0.1), bodyMat);
-    armR.position.set(0.23, 0.96, 0);
+    // Hair / Safety Helmet variants
+    const hairColors = [0x1c1917, 0x451a03, 0x78350f, 0x27272a];
+    const hairMat = new THREE.MeshStandardMaterial({
+      color: hairColors[person.id % hairColors.length],
+      roughness: 0.8
+    });
+    if (person.hairStyle === 2) {
+      // Safety hard-hat (yellow/white)
+      const helmetMat = new THREE.MeshStandardMaterial({
+        color: person.id % 2 === 0 ? 0xfacc15 : 0xf8fafc,
+        roughness: 0.35
+      });
+      const dome = new THREE.Mesh(
+        new THREE.SphereGeometry(0.172, 16, 12, 0, Math.PI * 2, 0, Math.PI * 0.55),
+        helmetMat
+      );
+      dome.position.y = 0.02;
+      const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.19, 0.19, 0.02, 16), helmetMat);
+      brim.position.set(0, 0.03, 0.02);
+      headGroup.add(dome, brim);
+    } else {
+      const cap = new THREE.Mesh(
+        new THREE.SphereGeometry(0.162, 14, 12, 0, Math.PI * 2, 0, Math.PI * 0.58),
+        hairMat
+      );
+      cap.position.y = 0.02;
+      cap.rotation.x = -0.18;
+      headGroup.add(cap);
+      if (person.hairStyle === 1) {
+        const bun = new THREE.Mesh(new THREE.SphereGeometry(0.068, 10, 10), hairMat);
+        bun.position.set(0, 0.02, -0.16);
+        headGroup.add(bun);
+      }
+    }
 
-    // Glowing smartphone in right hand (visible in MR Vision)
+    // Articulated Left & Right Arms + Hands + Glowing Smartphone
+    const makeArm = (xOff) => {
+      const shoulder = new THREE.Group();
+      shoulder.position.set(xOff, 1.27, 0);
+      const sleeve = new THREE.Mesh(new THREE.CylinderGeometry(0.058, 0.048, 0.5, 10), shirtMat);
+      sleeve.position.y = -0.24;
+      sleeve.castShadow = true;
+      shoulder.add(sleeve);
+      const hand = new THREE.Mesh(new THREE.SphereGeometry(0.046, 10, 10), skinMat);
+      hand.position.y = -0.5;
+      shoulder.add(hand);
+      bodyRoot.add(shoulder);
+      return shoulder;
+    };
+    const armL = makeArm(-0.235);
+    const armR = makeArm(0.235);
+
     const phoneMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8 });
-    const phone = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.11, 0.02), phoneMat);
-    phone.position.set(0, -0.22, 0.08);
+    const phone = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.11, 0.016), phoneMat);
+    phone.position.set(0, -0.53, 0.07);
+    phone.rotation.x = -0.6;
     armR.add(phone);
 
-    // Reaction Speech / Status Sprite above head
+    // Floating Speech Bubble Sprite!
     const bubbleCanvas = document.createElement('canvas');
-    bubbleCanvas.width = 320;
-    bubbleCanvas.height = 72;
+    bubbleCanvas.width = 480;
+    bubbleCanvas.height = 118;
+    drawSpeechBubbleCanvas(bubbleCanvas, person.phrase, person.speechUrgency);
     const bubbleTex = new THREE.CanvasTexture(bubbleCanvas);
     bubbleTex.colorSpace = THREE.SRGBColorSpace;
-    const sprite = new THREE.Sprite(
-      new THREE.SpriteMaterial({ map: bubbleTex, transparent: true, depthWrite: false })
-    );
-    sprite.scale.set(1.65, 0.38, 1);
-    sprite.position.y = 1.82;
+    const bubbleMat = new THREE.SpriteMaterial({
+      map: bubbleTex,
+      transparent: true,
+      depthTest: false
+    });
+    const bubbleSprite = new THREE.Sprite(bubbleMat);
+    bubbleSprite.scale.set(2.35, 0.58, 1);
+    bubbleSprite.position.set(0, 2.08, 0);
+    bubbleSprite.renderOrder = 10;
+    bubbleSprite.visible = person.speechVisible;
+    group.add(bubbleSprite);
 
-    group.add(torso, head, legL, legR, armL, armR, sprite);
-    this.worldShakeGroup.add(group);
-
-    const meshData = {
-      group,
+    group.userData = {
+      bodyRoot,
       torso,
-      head,
+      headGroup,
       legL,
       legR,
       armL,
       armR,
-      phone,
       phoneMat,
-      sprite,
       bubbleCanvas,
       bubbleTex,
-      lastPhrase: ''
+      bubbleSprite,
+      lastPhrase: person.phrase,
+      lastUrgency: person.speechUrgency
     };
-    this._updatePersonBubble(meshData, person.phrase, person.state);
-    return meshData;
+
+    this.buildingGroup.add(group);
+    return group;
   }
 
-  _updatePersonBubble(meshData, phrase, state) {
-    const key = `${state}|${phrase}`;
-    if (meshData.lastPhrase === key) return;
-    meshData.lastPhrase = key;
+  _syncPeopleMeshes(dt) {
+    const activeIds = new Set();
 
-    const ctx = meshData.bubbleCanvas.getContext('2d');
-    ctx.clearRect(0, 0, 320, 72);
+    this.sim.people.forEach((p) => {
+      activeIds.add(p.id);
+      let mesh = this.personMeshes.get(p.id);
+      if (!mesh) {
+        mesh = this._createPersonMesh(p);
+        this.personMeshes.set(p.id, mesh);
+      }
 
-    let border = '#38bdf8';
-    if (state === 'crouching' || state === 'evacuating_calm') border = '#fbbf24';
-    if (state === 'evacuating_panic' || state === 'trapped') border = '#ef4444';
-    if (state === 'evacuated') border = '#10b981';
+      // Compute floor modal horizontal offset if inside building
+      const floorFloat = Math.max(0, Math.min(3, p.y / FLOOR_HEIGHT));
+      const fLow = Math.floor(floorFloat);
+      const fHigh = Math.min(3, fLow + 1);
+      const fMix = floorFloat - fLow;
+      const inBldg = p.z < 4.1;
+      const driftX = inBldg
+        ? this.floorGroups[fLow].position.x * (1 - fMix) + this.floorGroups[fHigh].position.x * fMix
+        : 0;
+      const driftZ = inBldg
+        ? this.floorGroups[fLow].position.z * (1 - fMix) + this.floorGroups[fHigh].position.z * fMix
+        : 0;
 
-    ctx.fillStyle = 'rgba(7, 12, 22, 0.85)';
-    drawRoundRectPath(ctx, 4, 6, 312, 60, 14);
-    ctx.fill();
+      mesh.position.set(p.x + driftX, p.y + (inBldg ? 0.22 : 0.14), p.z + driftZ);
+      mesh.rotation.y = p.facing;
+
+      const ud = mesh.userData;
+      const moving = Math.hypot(p.vx, p.vz) > 0.12;
+      const stride = moving ? Math.sin(p.walkPhase) : 0;
+
+      // Expressive articulated postures!
+      if (p.pose === 'cover_head') {
+        ud.bodyRoot.position.y = -0.34;
+        ud.bodyRoot.rotation.x = 0.32;
+        ud.headGroup.rotation.x = 0.35;
+        ud.armL.rotation.set(-2.35, 0, -0.35);
+        ud.armR.rotation.set(-2.35, 0, 0.35);
+        ud.legL.rotation.x = -0.55;
+        ud.legR.rotation.x = 0.35;
+      } else if (p.pose === 'crouch') {
+        ud.bodyRoot.position.y = -0.26;
+        ud.bodyRoot.rotation.x = 0.2;
+        ud.headGroup.rotation.x = -0.15;
+        ud.armL.rotation.set(-1.6, 0, -0.2);
+        ud.armR.rotation.set(-0.7, 0, 0.1);
+        ud.legL.rotation.x = -0.4;
+        ud.legR.rotation.x = 0.3;
+      } else if (p.pose === 'look_up') {
+        ud.bodyRoot.position.y = 0;
+        ud.bodyRoot.rotation.x = -0.06;
+        ud.headGroup.rotation.x = -0.45;
+        ud.headGroup.rotation.y = Math.sin(this.sim.time * 3.2 + p.id) * 0.35;
+        ud.armL.rotation.set(-0.45, 0, 0.35);
+        ud.armR.rotation.set(-0.65, 0, -0.25);
+        ud.legL.rotation.x = 0;
+        ud.legR.rotation.x = 0;
+      } else if (p.pose === 'wave_help') {
+        ud.bodyRoot.position.y = -0.28;
+        ud.bodyRoot.rotation.x = 0.12;
+        ud.headGroup.rotation.x = -0.2;
+        ud.armL.rotation.set(-2.65, 0, Math.sin(this.sim.time * 8 + p.id) * 0.45);
+        ud.armR.rotation.set(-0.85, 0, 0);
+        ud.legL.rotation.x = -0.45;
+        ud.legR.rotation.x = 0.25;
+      } else if (p.pose === 'run') {
+        ud.bodyRoot.position.y = Math.abs(stride) * 0.05;
+        ud.bodyRoot.rotation.x = 0.18;
+        ud.headGroup.rotation.set(0, 0, 0);
+        ud.legL.rotation.x = stride * 0.78;
+        ud.legR.rotation.x = -stride * 0.78;
+        ud.armL.rotation.set(-stride * 0.72, 0, 0);
+        ud.armR.rotation.set(stride * 0.72 - 0.35, 0, 0);
+      } else {
+        // Normal stand / walk
+        ud.bodyRoot.position.y = moving ? Math.abs(stride) * 0.025 : 0;
+        ud.bodyRoot.rotation.x = 0;
+        ud.headGroup.rotation.x = 0;
+        ud.headGroup.rotation.y = moving ? 0 : Math.sin(this.sim.time * 1.1 + p.id) * 0.2;
+        ud.legL.rotation.x = stride * 0.48;
+        ud.legR.rotation.x = -stride * 0.48;
+        ud.armL.rotation.set(-stride * 0.36, 0, 0);
+        ud.armR.rotation.set(-0.52 + stride * 0.22, 0, 0);
+      }
+
+      // Phone LED status
+      if (p.phoneOnline) {
+        ud.phoneMat.color.setHex(0x38bdf8);
+      } else {
+        ud.phoneMat.color.setHex(Math.floor(this.sim.time * 6) % 2 === 0 ? 0xef4444 : 0x1e293b);
+      }
+
+      // Speech bubble update
+      ud.bubbleSprite.visible = Boolean(p.speechVisible && p.phrase);
+      if (ud.bubbleSprite.visible) {
+        if (ud.lastPhrase !== p.phrase || ud.lastUrgency !== p.speechUrgency) {
+          ud.lastPhrase = p.phrase;
+          ud.lastUrgency = p.speechUrgency;
+          drawSpeechBubbleCanvas(ud.bubbleCanvas, p.phrase, p.speechUrgency);
+          ud.bubbleTex.needsUpdate = true;
+        }
+        ud.bubbleSprite.position.y = (p.pose === 'cover_head' || p.pose === 'crouch' || p.pose === 'wave_help')
+          ? 1.75
+          : 2.08;
+      }
+    });
+
+    for (const [id, mesh] of this.personMeshes.entries()) {
+      if (!activeIds.has(id)) {
+        this.buildingGroup.remove(mesh);
+        this.personMeshes.delete(id);
+      }
+    }
+  }
+
+  _syncPreQuakeHolograms() {
+    this.hologramGroup.visible = this.sim.showPreQuakeHologram && Boolean(this.sim.frozenSnapshot);
+    if (!this.hologramGroup.visible) return;
+
+    const snap = this.sim.frozenSnapshot;
+    const sig = `${snap.triggerTime.toFixed(2)}-${snap.uniqueDevices.length}`;
+    if (sig === this.lastHoloSignature) {
+      this.hologramGroup.children.forEach((ch, idx) => {
+        ch.position.y = ch.userData.baseY + Math.sin(this.sim.time * 3.5 + idx) * 0.06;
+      });
+      return;
+    }
+
+    this.lastHoloSignature = sig;
+    while (this.hologramGroup.children.length > 0) {
+      this.hologramGroup.remove(this.hologramGroup.children[0]);
+    }
+
+    const holoMat = new THREE.MeshBasicMaterial({
+      color: 0x38bdf8,
+      wireframe: true,
+      transparent: true,
+      opacity: 0.78
+    });
+
+    snap.uniqueDevices.forEach((dev) => {
+      const marker = new THREE.Group();
+      const baseY = (dev.estY || 0) + 0.25;
+      marker.position.set(dev.estX, baseY, dev.estZ);
+      marker.userData.baseY = baseY;
+
+      const cyl = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.06, 1.55, 8), holoMat);
+      cyl.position.y = 0.78;
+      marker.add(cyl);
+
+      const baseRing = new THREE.Mesh(
+        new THREE.RingGeometry(0.34, 0.44, 20),
+        new THREE.MeshBasicMaterial({ color: 0xfbbf24, side: THREE.DoubleSide })
+      );
+      baseRing.rotation.x = -Math.PI / 2;
+      baseRing.position.y = 0.04;
+      marker.add(baseRing);
+
+      this.hologramGroup.add(marker);
+    });
+  }
+
+  _updateSnifferOledCanvas() {
+    const ctx = this.snifferOledCanvas.getContext('2d');
+    const w = this.snifferOledCanvas.width;
+    const h = this.snifferOledCanvas.height;
+
+    const isMajor = this.sim.scenario === 'major' && (this.sim.quakeActive || this.sim.frozenSnapshot);
+    const isMild = this.sim.scenario === 'mild' && (this.sim.quakeActive || this.sim.frozenSnapshot);
+
+    // Full bezel-filling frame with signature cyan/amber/red border matching bozeto del sniffer rediseño IA.jpg
+    ctx.fillStyle = isMajor ? '#240709' : isMild ? '#221705' : '#060c15';
+    ctx.fillRect(0, 0, w, h);
+
+    ctx.strokeStyle = isMajor ? '#ef4444' : isMild ? '#f59e0b' : '#14b8a6';
+    ctx.lineWidth = 7;
+    ctx.strokeRect(4, 4, w - 8, h - 8);
+
+    // Battery & RPi5 header
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = 'bold 21px monospace';
+    ctx.fillText('RPi5 · MPU6050 · PISO 2', 28, 46);
+
+    ctx.strokeStyle = '#e2e8f0';
     ctx.lineWidth = 3;
-    ctx.strokeStyle = border;
-    ctx.stroke();
+    ctx.strokeRect(430, 26, 52, 24);
+    ctx.fillStyle = '#34d399';
+    ctx.fillRect(434, 30, 40, 16);
 
-    ctx.fillStyle = '#f8fafc';
-    ctx.font = 'bold 18px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText(phrase.slice(0, 30), 160, 43);
+    if (isMajor) {
+      ctx.fillStyle = '#f87171';
+      ctx.font = 'bold 68px system-ui, sans-serif';
+      ctx.fillText('ALERTA', 34, 152);
+      ctx.fillStyle = '#fef2f2';
+      ctx.font = 'bold 34px system-ui, sans-serif';
+      ctx.fillText('Enviando datos t₀ → Poste', 34, 214);
+      this.snifferLedMat.color.setHex(Math.floor(this.sim.time * 10) % 2 === 0 ? 0xef4444 : 0x450a0a);
+    } else if (isMild) {
+      ctx.fillStyle = '#fbbf24';
+      ctx.font = 'bold 56px system-ui, sans-serif';
+      ctx.fillText('SISMO LEVE', 34, 150);
+      ctx.fillStyle = '#fef3c7';
+      ctx.font = 'bold 32px system-ui, sans-serif';
+      ctx.fillText('Enviando datos → Poste', 34, 212);
+      this.snifferLedMat.color.setHex(0xfbbf24);
+    } else {
+      ctx.fillStyle = '#2dd4bf';
+      ctx.font = 'bold 52px system-ui, sans-serif';
+      ctx.fillText('MONITOREO', 34, 150);
+      ctx.fillStyle = '#cbd5e1';
+      ctx.font = '30px monospace';
+      ctx.fillText(`Tramas 10s: ${this.sim.rollingProbes.length}`, 34, 212);
+      this.snifferLedMat.color.setHex(0x2dd4bf);
+    }
 
-    meshData.bubbleTex.needsUpdate = true;
+    ctx.fillStyle = '#38bdf8';
+    ctx.font = 'bold 24px monospace';
+    ctx.fillText(
+      `STA/LTA: ${this.sim.staLtaRatio.toFixed(2)}  |  ${this.sim.accel.dynamicG.toFixed(3)}g`,
+      34,
+      298
+    );
+
+    this.snifferOledTex.needsUpdate = true;
+  }
+
+  _updatePoleGatewayAndLeds(dt) {
+    // Smooth carriage height along Street Light Pole
+    const h = this.sim.gatewayHeight;
+    this.gatewayCarriageGroup.position.y = h;
+
+    // Update steel hoist cable from pulley (y = 5.42) down to carriage (y = h + 0.22)
+    const cableLen = Math.max(0.15, 5.42 - (h + 0.22));
+    this.hoistCable.scale.set(1, cableLen, 1);
+    this.hoistCable.position.set(-0.24, h + 0.22 + cableLen / 2, 0);
+
+    // Rotate winch crank handle while lowering/raising
+    if (this.sim.gatewayPoleState === 'lowering') {
+      this.winchCrank.rotation.z += dt * 9.5;
+    } else if (this.sim.gatewayPoleState === 'raising') {
+      this.winchCrank.rotation.z -= dt * 9.5;
+    }
+
+    // Show USB-C extraction cable connected to field laptop when Gateway is lowered
+    this.usbExtractionCable.visible = this.sim.gatewayPoleState === 'down';
+
+    // Update wireless beam curve from Piso 2 Sniffer -> current Gateway height on Pole!
+    if (this.mrVisionEnabled) {
+      this.snifferGatewayBeam.visible = true;
+      if (this._lastBeamHeight === undefined || Math.abs(h - this._lastBeamHeight) > 0.002) {
+        this._lastBeamHeight = h;
+        const pts = [
+          new THREE.Vector3(SNIFFER_WORLD_POS.x, SNIFFER_WORLD_POS.y + 0.45, SNIFFER_WORLD_POS.z),
+          new THREE.Vector3(3.2, 6.2 + h * 0.35, 3.0),
+          new THREE.Vector3(POLE_WORLD_POS.x - 0.36, 0.14 + h + 0.22, POLE_WORLD_POS.z)
+        ];
+        this.linkLineGeo.setFromPoints(new THREE.CatmullRomCurve3(pts).getPoints(36));
+        this.snifferGatewayBeam.computeLineDistances();
+      }
+      this.linkLineMat.color.setHex(this.sim.gatewayLeds.yellow ? 0xfbbf24 : 0x38bdf8);
+      this.linkLineMat.opacity = this.sim.gatewayLeds.blink ? 0.95 : 0.42;
+    } else {
+      this.snifferGatewayBeam.visible = false;
+    }
+
+    // Sync the 3 Physical LEDs on the Gateway
+    const leds = this.sim.gatewayLeds;
+    this.gwMatBlue.color.setHex(leds.blue ? 0x3b82f6 : 0x101c30);
+    this.gwMatBlink.color.setHex(leds.blink ? 0x38bdf8 : 0x132030);
+    this.gwMatYellow.color.setHex(leds.yellow ? 0xfbbf24 : 0x292110);
+
+    if (leds.yellow) {
+      this.gwGlowLight.color.setHex(0xfbbf24);
+      this.gwGlowLight.intensity = leds.blink ? 2.4 : 1.65;
+    } else {
+      this.gwGlowLight.color.setHex(0x3b82f6);
+      this.gwGlowLight.intensity = leds.blink ? 1.85 : 1.1;
+    }
+
+    this._updatePoleSignTexture();
   }
 
   _bindInputs() {
     window.addEventListener('keydown', (e) => {
-      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) return;
-      this.keys[e.code] = true;
-      if (e.code === 'KeyE' && this.cb.onExtractGateway) {
-        this.cb.onExtractGateway();
-      }
-      if (e.code === 'KeyG' && this.cb.onHitDesk) {
-        this.cb.onHitDesk();
-      }
+      const k = e.key.toLowerCase();
+      if (k in this.keys) this.keys[k] = true;
     });
-
     window.addEventListener('keyup', (e) => {
-      this.keys[e.code] = false;
+      const k = e.key.toLowerCase();
+      if (k in this.keys) this.keys[k] = false;
     });
 
     const dom = this.renderer.domElement;
+    let downX = 0;
+    let downY = 0;
+
     dom.addEventListener('pointerdown', (e) => {
       this.stopIntroOrbit();
+      downX = e.clientX;
+      downY = e.clientY;
       this.isPointerDragging = true;
-      this.prevPointer.x = e.clientX;
-      this.prevPointer.y = e.clientY;
     });
 
-    window.addEventListener('pointerup', (e) => {
-      const moved = Math.hypot(e.clientX - this.prevPointer.x, e.clientY - this.prevPointer.y);
+    window.addEventListener('pointerup', () => {
       this.isPointerDragging = false;
-      if (moved < 6 && e.target === dom) {
-        this._handleSceneClick(e);
-      }
     });
 
-    window.addEventListener('pointermove', (e) => {
+    dom.addEventListener('pointermove', (e) => {
       if (this.cameraMode === 'firstperson' && this.isPointerDragging) {
-        const dx = e.clientX - this.prevPointer.x;
-        const dy = e.clientY - this.prevPointer.y;
-        this.prevPointer.x = e.clientX;
-        this.prevPointer.y = e.clientY;
-        this.fpYaw -= dx * 0.0042;
-        this.fpPitch = Math.max(-1.1, Math.min(1.1, this.fpPitch - dy * 0.0042));
+        this.fpYaw -= e.movementX * 0.004;
+        this.fpPitch = Math.max(-1.1, Math.min(1.15, this.fpPitch - e.movementY * 0.003));
       }
     });
-  }
 
-  _handleSceneClick(e) {
-    const rect = this.renderer.domElement.getBoundingClientRect();
-    this.pointerNDC.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-    this.pointerNDC.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+    dom.addEventListener('click', (e) => {
+      if (Math.hypot(e.clientX - downX, e.clientY - downY) > 6) return;
+      const rect = dom.getBoundingClientRect();
+      this.pointerNdc.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+      this.pointerNdc.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+      this.raycaster.setFromCamera(this.pointerNdc, this.camera);
 
-    this.raycaster.setFromCamera(this.pointerNDC, this.camera);
-
-    if (this.raycaster.intersectObjects(this.clickableGateway, true).length > 0) {
-      if (this.cb.onExtractGateway) this.cb.onExtractGateway();
-      return;
-    }
-    if (this.raycaster.intersectObjects(this.clickableSniffer, true).length > 0) {
-      this.setCameraMode('sniffer');
-      if (this.cb.onCameraModeChanged) this.cb.onCameraModeChanged('sniffer');
-      return;
-    }
-    if (this.raycaster.intersectObjects(this.clickableDesk, true).length > 0) {
-      if (this.cb.onHitDesk) this.cb.onHitDesk();
-    }
-  }
-
-  stopIntroOrbit() {
-    this.introOrbitActive = false;
-    this.controls.autoRotate = false;
-  }
-
-  restoreBackground() {
-    this.scene.background = new THREE.Color(0x070c16);
+      // Check Pole / Gateway clicks
+      if (this.raycaster.intersectObjects(this.clickableGateway, true).length > 0) {
+        if (this.sim.gatewayPoleState === 'down') {
+          if (this.cb.onGatewayClick) this.cb.onGatewayClick();
+        } else if (this.cb.onPoleClick) {
+          this.cb.onPoleClick();
+        }
+        return;
+      }
+      if (this.raycaster.intersectObjects(this.clickablePole, true).length > 0) {
+        if (this.cb.onPoleClick) this.cb.onPoleClick();
+        return;
+      }
+      if (this.raycaster.intersectObjects(this.clickableSniffer, true).length > 0) {
+        if (this.cb.onSnifferClick) this.cb.onSnifferClick();
+      }
+    });
   }
 
   setCameraMode(mode) {
     this.stopIntroOrbit();
     this.cameraMode = mode;
-    if (mode === 'firstperson') {
-      this.controls.enabled = false;
-      this.camera.position.copy(this.fpPos);
-    } else {
+    if (mode === 'tactical') {
       this.controls.enabled = true;
-      if (mode === 'tactical') {
-        this.camera.position.set(7.5, 11.5, 17.5);
-        this.controls.target.set(0.8, 1.1, 2.2);
-      } else if (mode === 'gateway') {
-        this.camera.position.set(GATEWAY_WORLD_POS.x + 0.55, 1.38, GATEWAY_WORLD_POS.z + 0.92);
-        this.controls.target.set(GATEWAY_WORLD_POS.x + 0.32, 1.14, GATEWAY_WORLD_POS.z);
-      } else if (mode === 'sniffer') {
-        this.camera.position.set(SNIFFER_WORLD_POS.x + 0.18, 1.72, SNIFFER_WORLD_POS.z + 1.05);
-        this.controls.target.set(SNIFFER_WORLD_POS.x, 1.56, SNIFFER_WORLD_POS.z);
-      }
-      this.controls.update();
-    }
-  }
-
-  _updateFirstPerson(dt) {
-    if (this.cameraMode !== 'firstperson' || this.renderer.xr.isPresenting) return;
-    const moveSpeed = (this.keys['ShiftLeft'] ? 6.5 : 4.2) * dt;
-    const forward = new THREE.Vector3(-Math.sin(this.fpYaw), 0, -Math.cos(this.fpYaw));
-    const right = new THREE.Vector3(Math.cos(this.fpYaw), 0, -Math.sin(this.fpYaw));
-
-    if (this.keys['KeyW'] || this.keys['ArrowUp']) this.fpPos.addScaledVector(forward, moveSpeed);
-    if (this.keys['KeyS'] || this.keys['ArrowDown']) this.fpPos.addScaledVector(forward, -moveSpeed);
-    if (this.keys['KeyD'] || this.keys['ArrowRight']) this.fpPos.addScaledVector(right, moveSpeed);
-    if (this.keys['KeyA'] || this.keys['ArrowLeft']) this.fpPos.addScaledVector(right, -moveSpeed);
-
-    this.fpPos.x = Math.max(-15, Math.min(15, this.fpPos.x));
-    this.fpPos.z = Math.max(-11, Math.min(18, this.fpPos.z));
-
-    this.camera.position.copy(this.fpPos);
-    const euler = new THREE.Euler(this.fpPitch, this.fpYaw, 0, 'YXZ');
-    this.camera.quaternion.setFromEuler(euler);
-  }
-
-  _updateHardwareCanvases() {
-    // 1. Sniffer OLED Screen on modelo3d.stl
-    const ctx = this.snifferOledCanvas.getContext('2d');
-    const isMajor = this.sim.scenario === 'major' && (this.sim.quakeActive || this.sim.frozenSnapshot);
-    const isMild = this.sim.scenario === 'mild' && (this.sim.quakeActive || this.sim.frozenSnapshot);
-
-    ctx.fillStyle = isMajor ? '#1d0508' : isMild ? '#1b1204' : '#041210';
-    ctx.fillRect(0, 0, 256, 160);
-
-    // Top status bar + battery icon (matching bozeto del sniffer rediseño IA.jpg!)
-    ctx.fillStyle = isMajor ? '#f87171' : isMild ? '#fbbf24' : '#5eead4';
-    ctx.font = 'bold 16px monospace';
-    ctx.textAlign = 'left';
-    ctx.fillText(`STA/LTA:${this.sim.staLtaRatio.toFixed(1)}`, 12, 24);
-
-    // Battery icon top right
-    ctx.strokeStyle = '#e2e8f0';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(208, 10, 32, 15);
-    ctx.fillStyle = '#34d399';
-    ctx.fillRect(211, 13, 24, 9);
-    ctx.fillRect(240, 14, 3, 7);
-
-    // Main title ("ALERTA / Enviando datos")
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 34px sans-serif';
-    ctx.textAlign = 'center';
-    if (isMajor) {
-      ctx.fillStyle = '#fecaca';
-      ctx.fillText('ALERTA', 128, 76);
-      ctx.font = '600 22px sans-serif';
-      ctx.fillText('Enviando datos', 128, 112);
-    } else if (isMild) {
-      ctx.fillStyle = '#fde68a';
-      ctx.fillText('SISMO LEVE', 128, 76);
-      ctx.font = '600 21px sans-serif';
-      ctx.fillText('Enviando datos', 128, 112);
-    } else {
-      ctx.fillStyle = '#99f6e4';
-      ctx.fillText('MONITOREO', 128, 76);
-      ctx.font = '600 19px monospace';
-      ctx.fillText(`PKTS 10s: ${this.sim.rollingProbes.length}`, 128, 112);
-    }
-
-    ctx.fillStyle = '#94a3b8';
-    ctx.font = '14px monospace';
-    ctx.fillText(`MPU6050: ${this.sim.accel.dynamicG.toFixed(3)}g`, 128, 144);
-    this.snifferOledTex.needsUpdate = true;
-
-    this.snifferLedMat.color.setHex(isMajor ? 0xef4444 : isMild ? 0xfbbf24 : 0x2dd4bf);
-
-    // 2. Operator Field Laptop Screen
-    const lctx = this.laptopScreenCanvas.getContext('2d');
-    lctx.fillStyle = '#07101e';
-    lctx.fillRect(0, 0, 256, 160);
-    lctx.strokeStyle = this.sim.gatewayLeds.yellow ? '#fbbf24' : '#38bdf8';
-    lctx.lineWidth = 4;
-    lctx.strokeRect(4, 4, 248, 152);
-    lctx.fillStyle = this.sim.gatewayLeds.yellow ? '#fbbf24' : '#38bdf8';
-    lctx.font = 'bold 19px monospace';
-    lctx.textAlign = 'center';
-    lctx.fillText('RPi5 GATEWAY LINK', 128, 42);
-    lctx.fillStyle = '#e2e8f0';
-    lctx.font = '16px sans-serif';
-    lctx.fillText(
-      this.sim.gatewayLeds.yellow ? '¡DATOS PRE-SISMO LISTOS!' : 'Esperando evento t₀...',
-      128,
-      86
-    );
-    lctx.fillStyle = '#94a3b8';
-    lctx.font = '14px monospace';
-    lctx.fillText('[Clic en Gateway o Tecla E]', 128, 126);
-    this.laptopScreenTex.needsUpdate = true;
-  }
-
-  _syncPeopleAndHolograms() {
-    const activeIds = new Set();
-    const showSpeech = this.sim.quakeActive || this.sim.scenario !== 'normal';
-
-    this.sim.people.forEach((p) => {
-      activeIds.add(p.id);
-      let m = this.personMeshes.get(p.id);
-      if (!m) {
-        m = this._createPersonMesh(p);
-        this.personMeshes.set(p.id, m);
-      }
-
-      m.group.position.set(p.x, 0.14, p.z);
-      if (Math.hypot(p.vx, p.vz) > 0.05) {
-        m.group.rotation.y = Math.atan2(p.vx, p.vz);
-      }
-
-      // Pose animation
-      const moving = Math.hypot(p.vx, p.vz) > 0.08;
-      if (p.state === 'crouching' || p.state === 'trapped') {
-        m.torso.position.y = 0.68;
-        m.head.position.y = 1.06;
-        m.legL.scale.y = 0.6;
-        m.legR.scale.y = 0.6;
-        m.armL.position.y = 0.72;
-        m.armR.position.y = 0.78;
-        // Waving arm if trapped!
-        m.armL.rotation.z = p.state === 'trapped' ? 2.4 + Math.sin(this.sim.time * 9) * 0.4 : 0.3;
-      } else {
-        m.torso.position.y = 0.96;
-        m.head.position.y = 1.38;
-        m.legL.scale.y = 1.0;
-        m.legR.scale.y = 1.0;
-        m.armL.position.y = 0.96;
-        m.armR.position.y = 0.96;
-        m.armL.rotation.z = 0;
-        const swing = moving ? Math.sin(p.walkPhase) * 0.55 : 0;
-        m.legL.rotation.x = swing;
-        m.legR.rotation.x = -swing;
-        m.armL.rotation.x = -swing * 0.7;
-        m.armR.rotation.x = swing * 0.7;
-      }
-
-      m.phone.visible = this.mrVisionEnabled && p.phoneOnline;
-      m.sprite.visible = showSpeech || p.id % 3 === 0;
-      this._updatePersonBubble(m, p.phrase, p.state);
-    });
-
-    // Clean removed people
-    for (const [id, m] of this.personMeshes.entries()) {
-      if (!activeIds.has(id)) {
-        this.worldShakeGroup.remove(m.group);
-        this.personMeshes.delete(id);
-      }
-    }
-
-    // Pre-Quake t0 Holographic Ghost Beacons (shown after Operator submits report or toggles verification)
-    if (this.sim.showPreQuakeHologram && this.sim.frozenSnapshot) {
-      const positions = this.sim.frozenSnapshot.groundTruthPositions;
-      while (this.hologramGroup.children.length < positions.length) {
-        const holo = new THREE.Group();
-        const cyl = new THREE.Mesh(
-          new THREE.CylinderGeometry(0.24, 0.24, 1.65, 16, 1, true),
-          new THREE.MeshBasicMaterial({
-            color: 0x34d399,
-            transparent: true,
-            opacity: 0.38,
-            side: THREE.DoubleSide
-          })
-        );
-        cyl.position.y = 0.96;
-        const baseRing = new THREE.Mesh(
-          new THREE.RingGeometry(0.26, 0.38, 24),
-          new THREE.MeshBasicMaterial({ color: 0x6ee7b7, side: THREE.DoubleSide })
-        );
-        baseRing.rotation.x = -Math.PI / 2;
-        baseRing.position.y = 0.16;
-        holo.add(cyl, baseRing);
-        this.hologramGroup.add(holo);
-      }
-      this.hologramGroup.visible = true;
-      this.hologramGroup.children.forEach((child, idx) => {
-        if (idx < positions.length) {
-          child.visible = true;
-          child.position.set(positions[idx].x, 0, positions[idx].z);
-          child.rotation.y = this.sim.time * 1.5;
-        } else {
-          child.visible = false;
-        }
-      });
-    } else {
-      this.hologramGroup.visible = false;
-    }
-  }
-
-  update(dt) {
-    this._updateFirstPerson(dt);
-    if (this.controls.enabled && !this.renderer.xr.isPresenting) {
-      this.controls.update();
-    }
-
-    // 1. Apply physical ground shaking to worldShakeGroup
-    const g = this.sim.accel.dynamicG;
-    if (g > 0.018) {
-      const amp = Math.min(0.28, (g - 0.015) * 0.42);
-      this.worldShakeGroup.position.set(
-        Math.sin(this.sim.time * 29) * amp,
-        Math.cos(this.sim.time * 37) * amp * 0.35,
-        Math.cos(this.sim.time * 23) * amp
+      this.camera.position.set(1.5, 13.8, 25.5);
+      this.controls.target.set(0.2, 5.6, 1.2);
+    } else if (mode === 'gateway' || mode === 'pole') {
+      this.controls.enabled = true;
+      const focusY = this.sim.gatewayPoleState === 'down' ? 1.55 : 3.35;
+      this.camera.position.set(POLE_WORLD_POS.x - 4.4, focusY + 1.2, POLE_WORLD_POS.z + 4.8);
+      this.controls.target.set(POLE_WORLD_POS.x - 0.35, focusY, POLE_WORLD_POS.z);
+    } else if (mode === 'sniffer') {
+      this.controls.enabled = true;
+      this.camera.position.set(
+        SNIFFER_WORLD_POS.x + 0.15,
+        SNIFFER_WORLD_POS.y + 0.55,
+        SNIFFER_WORLD_POS.z + 1.65
       );
-    } else {
-      this.worldShakeGroup.position.set(0, 0, 0);
+      this.controls.target.set(
+        SNIFFER_WORLD_POS.x - 0.04,
+        SNIFFER_WORLD_POS.y + 0.38,
+        SNIFFER_WORLD_POS.z
+      );
+    } else if (mode === 'firstperson') {
+      this.controls.enabled = false;
+      this.camera.position.set(3.8, 1.72, 13.2);
+      this.fpYaw = 0.24;
+      this.fpPitch = 0.14;
     }
-
-    // 2. Swing hanging lamps & update emergency lighting on collapse
-    this.hangingLamps.forEach((lamp, idx) => {
-      const sway = Math.min(0.45, g * 0.85);
-      lamp.pivot.rotation.z = Math.sin(this.sim.time * 4.5 + lamp.phase) * sway;
-      lamp.pivot.rotation.x = Math.cos(this.sim.time * 3.8 + idx) * sway * 0.7;
-
-      if (this.sim.collapseOccurred) {
-        lamp.light.color.setHex(0xef4444);
-        lamp.light.intensity = 1.2 + Math.sin(this.sim.time * 12 + idx) * 0.4;
-        lamp.shade.material.emissive.setHex(0xef4444);
-      } else {
-        lamp.light.color.setHex(0xe0f2fe);
-        lamp.light.intensity = 2.4;
-        lamp.shade.material.emissive.setHex(0xbae6fd);
-      }
-    });
-
-    // Show/hide collapse rubble per zone
-    ZONES.forEach((z) => {
-      if (this.debrisGroups[z.id]) {
-        this.debrisGroups[z.id].visible = this.sim.collapsedZones.has(z.id);
-      }
-    });
-
-    // 3. Hardware Sync: Update the 3 Physical LEDs on the 3D Gateway!
-    const leds = this.sim.gatewayLeds;
-    this.gwLedBlueMat.emissiveIntensity = leds.blue ? 2.6 : 0.0;
-    this.gwLedBlueMat.color.setHex(leds.blue ? 0x60a5fa : 0x1e293b);
-
-    this.gwLedBlinkMat.emissiveIntensity = leds.blink ? 2.8 : 0.0;
-    this.gwLedBlinkMat.color.setHex(leds.blink ? 0x34d399 : 0x1e293b);
-
-    this.gwLedYellowMat.emissiveIntensity = leds.yellow ? 3.2 : 0.0;
-    this.gwLedYellowMat.color.setHex(leds.yellow ? 0xfbbf24 : 0x1e293b);
-
-    if (leds.yellow) {
-      this.gwGlowLight.color.setHex(0xf59e0b);
-      this.gwGlowLight.intensity = 1.8 + Math.sin(this.sim.time * 5) * 0.4;
-      this.usbCableMat.emissive.setHex(0xf59e0b);
-    } else if (leds.blink) {
-      this.gwGlowLight.color.setHex(0x10b981);
-      this.gwGlowLight.intensity = 1.4;
-    } else {
-      this.gwGlowLight.color.setHex(0x3b82f6);
-      this.gwGlowLight.intensity = 0.9;
-      this.usbCableMat.emissive.setHex(0x0284c7);
-    }
-
-    // 4. Update RF pulses & MR Shockwaves
-    const showRfInside =
-      this.mrVisionEnabled && !(this.sim.challengeMode && this.sim.frozenSnapshot && !this.sim.reportSubmitted);
-
-    this.rfPulsePool.forEach((ring, idx) => {
-      const p = this.sim.rfPulses[idx];
-      if (p && showRfInside) {
-        ring.visible = true;
-        ring.position.set(p.x, 0.18, p.z);
-        ring.scale.setScalar(p.radius);
-        ring.material.color.setHex(p.isRandom ? 0xfbbf24 : 0x38bdf8);
-        ring.material.opacity = Math.max(0, p.alpha * 0.55);
-      } else {
-        ring.visible = false;
-      }
-    });
-
-    this.shockwavePool.forEach((swMesh, idx) => {
-      const sw = this.sim.shockwaves[idx];
-      if (sw) {
-        swMesh.visible = true;
-        swMesh.position.set(sw.x, 0.22, sw.z);
-        swMesh.scale.setScalar(sw.radius);
-        swMesh.material.color.set(sw.color);
-        swMesh.material.opacity = Math.max(0, sw.alpha);
-      } else {
-        swMesh.visible = false;
-      }
-    });
-
-    // Wireless RF stream particles Sniffer -> Gateway
-    const linkSpeed = leds.blink ? 1.35 : 0.42;
-    this.rfLinkLine.visible = this.mrVisionEnabled;
-    this.snifferBeamParticles.forEach((orb) => {
-      orb.mesh.visible = this.mrVisionEnabled;
-      orb.t = (orb.t + dt * linkSpeed) % 1;
-      const pos = this.rfLinkCurve.getPoint(orb.t);
-      orb.mesh.position.copy(pos);
-      orb.mesh.material.color.setHex(leds.yellow ? 0xfbbf24 : 0x38bdf8);
-    });
-
-    // 5. Update Hardware OLED + People
-    this._updateHardwareCanvases();
-    this._syncPeopleAndHolograms();
-
-    this.renderer.render(this.scene, this.camera);
   }
 
   onResize() {
     const w = this.container.clientWidth || window.innerWidth;
     const h = this.container.clientHeight || window.innerHeight;
+    if (w === 0 || h === 0) return;
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(w, h);
+  }
+
+  update(dt) {
+    // 1. Multi-story Structural Modal Sway during Seismic Shaking
+    const gAmp = this.sim.accel.dynamicG;
+    if (gAmp > 0.015) {
+      const baseShakeX = this.sim.accel.x * 0.26;
+      const baseShakeZ = this.sim.accel.y * 0.22;
+      for (let f = 0; f < 4; f++) {
+        const ampFactor = 0.38 + f * 0.42; // Upper floors whip further horizontally!
+        this.floorGroups[f].position.x = baseShakeX * ampFactor;
+        this.floorGroups[f].position.z = baseShakeZ * ampFactor;
+      }
+      this.rooftopGroup.position.x = baseShakeX * 2.05;
+      this.rooftopGroup.position.z = baseShakeZ * 2.05;
+      this.stairwellGroup.position.x = baseShakeX * 0.95;
+      this.stairwellGroup.position.z = baseShakeZ * 0.95;
+    } else {
+      for (let f = 0; f < 4; f++) {
+        this.floorGroups[f].position.x *= 0.84;
+        this.floorGroups[f].position.z *= 0.84;
+      }
+      this.rooftopGroup.position.x *= 0.84;
+      this.rooftopGroup.position.z *= 0.84;
+      this.stairwellGroup.position.x *= 0.84;
+      this.stairwellGroup.position.z *= 0.84;
+    }
+
+    // Spin rooftop HVAC fans
+    this.hvacFans.forEach((fan, i) => {
+      fan.rotation.y += dt * (4.5 + i * 1.2);
+    });
+
+    // Emergency floor strobe beacons
+    const alertOn = this.sim.quakeActive || Boolean(this.sim.frozenSnapshot);
+    const flash = Math.floor(this.sim.time * 8) % 2 === 0;
+    this.floorAlarmLights.forEach((al, idx) => {
+      const collapsed = this.sim.collapsedZones.has(al.zoneId);
+      if (this.sim.scenario === 'major' && alertOn) {
+        const on = (Math.floor(this.sim.time * 9) + idx) % 2 === 0;
+        al.bulb.material.color.setHex(on ? 0xef4444 : 0x450a0a);
+        al.light.color.setHex(collapsed ? 0xf87171 : 0xfef2f2);
+        al.light.intensity = collapsed ? (on ? 0.9 : 0.2) : 0.55;
+      } else if (this.sim.scenario === 'mild' && this.sim.quakeActive) {
+        al.bulb.material.color.setHex(flash ? 0xfbbf24 : 0x451a03);
+        al.light.color.setHex(0xfef3c7);
+        al.light.intensity = 0.55;
+      } else {
+        al.bulb.material.color.setHex(0x3f1d1d);
+        al.light.color.setHex(0xe2e8f0);
+        al.light.intensity = 0.55;
+      }
+    });
+
+    // 2. Update Dynamic Falling/Swaying/Toppling Props + Dust & Sparks
+    this._updateDynamicProps(dt);
+
+    this.dustPool.forEach((d) => {
+      if (!d.visible) return;
+      d.userData.life -= dt * 0.72;
+      if (d.userData.life <= 0) {
+        d.visible = false;
+        return;
+      }
+      d.position.x += d.userData.vx * dt;
+      d.position.y += d.userData.vy * dt;
+      d.position.z += d.userData.vz * dt;
+      d.scale.addScalar(dt * 0.65);
+      d.material.opacity = d.userData.life * 0.38;
+    });
+
+    this.sparkPool.forEach((sp) => {
+      if (!sp.visible) return;
+      sp.userData.life -= dt;
+      if (sp.userData.life <= 0) {
+        sp.visible = false;
+        return;
+      }
+      sp.userData.vy -= 9.8 * dt;
+      sp.position.x += sp.userData.vx * dt;
+      sp.position.y += sp.userData.vy * dt;
+      sp.position.z += sp.userData.vz * dt;
+    });
+
+    // 3. Sync Articulated NPCs, Speech Bubbles & Pre-Quake Holograms
+    this._syncPeopleMeshes(dt);
+    this._syncPreQuakeHolograms();
+
+    // 4. Sync Outdoor Pole Gateway, 3 LEDs & Calibrated Sniffer OLED
+    this._updatePoleGatewayAndLeds(dt);
+    this._oledFrameCounter = (this._oledFrameCounter || 0) + 1;
+    if (this._oledFrameCounter % 4 === 0) {
+      this._updateSnifferOledCanvas();
+    }
+
+    // 5. Sync RF Probe Pulses & MR Shockwaves
+    for (let i = 0; i < this.rfRingPool.length; i++) {
+      const ring = this.rfRingPool[i];
+      const pulse = this.mrVisionEnabled ? this.sim.rfPulses[i] : null;
+      if (pulse) {
+        ring.visible = true;
+        ring.position.set(pulse.x, (pulse.y || 0) + 0.25, pulse.z);
+        ring.scale.setScalar(pulse.radius);
+        ring.material.color.setHex(pulse.isRandom ? 0xfbbf24 : 0x38bdf8);
+        ring.material.opacity = Math.max(0, pulse.alpha * 0.65);
+      } else {
+        ring.visible = false;
+      }
+    }
+
+    for (let i = 0; i < this.shockPool.length; i++) {
+      const ring = this.shockPool[i];
+      const sw = this.sim.shockwaves[i];
+      if (sw) {
+        ring.visible = true;
+        ring.position.set(sw.x, (sw.y || 0.16), sw.z);
+        ring.scale.setScalar(sw.radius);
+        ring.material.color.set(sw.color);
+        ring.material.opacity = Math.max(0, sw.alpha);
+      } else {
+        ring.visible = false;
+      }
+    }
+
+    // 6. Camera Controls (Orbit or First-Person Operator Walk)
+    if (!this.renderer.xr.isPresenting) {
+      if (this.cameraMode === 'firstperson') {
+        const moveSpeed = 5.4 * dt;
+        const fwdX = -Math.sin(this.fpYaw);
+        const fwdZ = -Math.cos(this.fpYaw);
+        const rightX = Math.cos(this.fpYaw);
+        const rightZ = -Math.sin(this.fpYaw);
+
+        if (this.keys.w) {
+          this.camera.position.x += fwdX * moveSpeed;
+          this.camera.position.z += fwdZ * moveSpeed;
+        }
+        if (this.keys.s) {
+          this.camera.position.x -= fwdX * moveSpeed;
+          this.camera.position.z -= fwdZ * moveSpeed;
+        }
+        if (this.keys.a) {
+          this.camera.position.x -= rightX * moveSpeed;
+          this.camera.position.z -= rightZ * moveSpeed;
+        }
+        if (this.keys.d) {
+          this.camera.position.x += rightX * moveSpeed;
+          this.camera.position.z += rightZ * moveSpeed;
+        }
+        this.camera.position.y = 1.72;
+        this.camera.rotation.order = 'YXZ';
+        this.camera.rotation.y = this.fpYaw;
+        this.camera.rotation.x = this.fpPitch;
+      } else {
+        this.controls.update();
+      }
+    }
+
+    this.renderer.render(this.scene, this.camera);
   }
 }

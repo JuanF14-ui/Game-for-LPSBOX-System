@@ -1,67 +1,63 @@
-# LPSBOX System — Simulador VR / MR de Emergencia Sísmica
+# LPSBOX System — Simulador VR / MR de Emergencia Sísmica (Edificio 4 Pisos)
 
-En este repositorio se encuentra el **simulador y juego interactivo 3D / WebXR (Realidad Virtual y Realidad Mixta)** donde se recrea un escenario de emergencia sísmica en el que operan en conjunto el **Nodo Sniffer (ESP32 + MPU6050)** y el **LPSBOX Gateway (Raspberry Pi 5 + ESP32)**, junto con los artefactos de diseño industrial de las Partes 2, 3 y 4 (`modelo3d.stl`, bocetos hechos a mano y renders asistidos por IA).
+En este repositorio se encuentra el **simulador y juego interactivo 3D / WebXR (Realidad Virtual y Realidad Mixta)** donde se recrea un escenario urbano y estructural de **4 pisos** para probar en conjunto el **Nodo Sniffer sobre Raspberry Pi 5 + MPU6050 (interior)** y el **LPSBOX Gateway montado en un Poste de Luz (exterior)**, junto con los artefactos de diseño industrial (`modelo3d.stl`, bocetos originales y rediseños asistidos por IA).
 
 🔗 **Ejecución directa en GitHub Pages:**  
-Una vez desplegado desde la rama `main`, el simulador corre directamente en el navegador (escritorio, móvil y cascos WebXR como Meta Quest) sin requerir pasos adicionales de compilación:  
 `https://juanf14-ui.github.io/Game-for-LPSBOX-System/`
 
 ---
 
-## 1. Concepto del Juego (Game Pitch): *«LPSBOX: Caja Negra Sísmica»*
+## 1. Arquitectura Física del Sistema LPSBOX y Rol del Operario
 
-Cuando ocurre un terremoto severo, el suministro eléctrico, los puntos de acceso WiFi y las antenas celulares suelen fallar en cuestión de segundos. Los equipos de búsqueda y rescate urbano (USAR) llegan sin saber **cuántas personas había dentro del edificio ni en qué salas se encontraban justo antes del sismo**.
+Cuando ocurre un terremoto en una edificación de varios pisos, el colapso de plafones, estanterías y el corte eléctrico dejan incomunicadas a las personas atrapadas en segundos. **LPSBOX** separa físicamente la detección interior del resguardo exterior de los datos:
 
-**LPSBOX** resuelve este problema actuando como una **caja negra sísmica distribuida**:
-1. **Nodo Sniffer Pasivo (ESP32 + MPU6050):** Instalado dentro de la edificación (`modelo3d.stl`), escucha de forma pasiva tramas *WiFi 802.11 / BLE Probe Request* de los teléfonos cercanos filtrando la aleatorización de direcciones MAC en ventanas deslizantes de **10 segundos**, al tiempo que monitorea vibraciones sísmicas mediante el algoritmo **STA/LTA** sobre el acelerómetro **MPU6050**.
-2. **LPSBOX Gateway (Raspberry Pi 5 + ESP32):** Ubicado en el puesto seguro del operario en una carcasa minimalista **sin pantalla**, provista únicamente de **3 indicadores LED físicos** y puertos `microSD` / `USB-C`. Al dispararse el umbral `STA/LTA ≥ 3.0` (`t₀`), el Sniffer transmite de emergencia la fotografía radioeléctrica previa al sismo hacia el Gateway.
-
-En el juego, **el jugador es el Operario de Emergencia**:
-- Puede **controlar los escenarios en tiempo real**: desde **Monitoreo Normal**, un **«Sismo Tranqui» (4.2 Mw)** con reacciones preventivas calmadas, un **Terremoto Severo (6.9 Mw)** con corte eléctrico, caída de escombros y personas atrapadas, o un **Golpe Físico en la Mesa** sobre el sensor MPU6050.
-- Vigila los **3 LEDs sincronizados del Gateway** (Azul = sin datos; Mini LED titilante = recibiendo paquetes; Amarillo = snapshot `t₀` almacenado).
-- Conecta la consola de extracción USB-C / RPi5 al Gateway, activa el **filtro anti-MAC-randomization de 10 s**, analiza el **mapa RSSI por zonas** y emite el **Informe Oficial de Rescate** indicando cuántas personas había y dónde se ubicaban con su celular antes del sismo, verificando su exactitud mediante **Hologramas 3D `t₀`** dentro del edificio.
+1. **Nodo Sniffer Interior (`modelo3d.stl` — Raspberry Pi 5 + Detector Sísmico MPU6050):**
+   - Instalado dentro del edificio (**Piso 2 — Laboratorio de Electrónica**).
+   - La **Raspberry Pi 5** ejecuta tanto el escaneo pasivo de *WiFi 802.11 / BLE Probe Requests* (con filtro de aleatorización de direcciones MAC en ventanas deslizantes de **10 segundos** y estimación multinivel por atenuación de losa) como el algoritmo sísmico **`STA/LTA`** sobre el acelerómetro **`MPU6050`**, activando su pantalla frontal completa (`ALERTA / Enviando datos`) y alarma de voz.
+2. **LPSBOX Gateway Exterior (En Poste de Alumbrado Público a 4.65 m):**
+   - Caja resistente minimalista **sin pantalla**, provista de **3 LEDs físicos de estado** (**Azul** = sin alerta, **Mini LED titilante** = recibiendo paquetes, **Amarillo** = captura pre-sismo `t₀` almacenada) y puertos `microSD` / `USB-C`.
+   - Ubicada afuera en un **poste de luz** fuera del radio de caída estructural. Para extraer los registros, **el operario debe primero accionar la polea del poste (`[B]` o clic en el poste 3D) para bajar el Gateway de `4.65 m` a `1.18 m`** y luego conectar el cable `USB-C` (`[E]`).
 
 ---
 
-## 2. Core Gameplay Loop y las 3 Mecánicas Físico-Virtuales
+## 2. Características Principales del Simulador 3D / WebXR
 
-| Mecánica | Fuente Física IoT | Traducción en el Entorno MR / VR |
-| :--- | :--- | :--- |
-| **Mecánica 1: Crowd Data (Spawns & Huella `t₀`)** | Conteo pasivo de smartphones vía *WiFi/BLE Probe Requests* con filtro de MAC aleatoria cada 10 s. | Controla la densidad de personas/entidades digitales en las 4 zonas del edificio (Laboratorio, Servidores, Auditorio, Cafetería) y genera la tabla y triangulación RSSI previa al sismo (`t₀`). |
-| **Mecánica 2: Seismic Data (Triggers STA/LTA)** | Acelerómetro triaxial **MPU6050** ejecutando `STA/LTA` continuo. | Golpear físicamente la mesa genera una **onda de choque electromagnética MR**; un sismo leve provoca reacciones calmadas; un terremoto dispara la alarma/voz del Sniffer, congela `t₀` y produce colapso parcial. |
-| **Mecánica 3: Hardware Sync (3 LEDs)** | Los 3 LEDs reales de la caja sin pantalla del Gateway (GPIO Raspberry Pi 5). | Sincronización 1:1 entre los LEDs del modelo 3D, el HUD del operario y el hardware físico: **LED Azul** (*No hay info*), **Mini LED Titilante** (*Recibiendo/Procesando*), **LED Amarillo** (*Hay información lista para extracción*). |
+- **Edificio de Prueba de 4 Pisos + Entorno Urbano:**
+  - **Piso 1:** Cafetería & Lobby Principal · **Piso 2:** Laboratorio de Electrónica & Nodo Sniffer RPi 5 · **Piso 3:** Sala de Servidores & Telecom · **Piso 4:** Auditorio & Sala de Proyectos, conectados por una **escalera de emergencia acristalada** hacia el punto de encuentro exterior.
+  - Deriva sísmica modal por altura (los pisos superiores oscilan con mayor amplitud que la planta baja).
+- **Física de Objetos que Caen y Oscilan:**
+  - Lámparas colgantes con péndulo y chispazos eléctricos, monitores, tazas, libros, macetas, cuadros de pared, proyectores, placas de plafón acústico y vuelco de libreros/racks de servidores según la aceleración del piso.
+- **NPCs Articulados con Diálogos y Reacciones Diferenciadas:**
+  - En **Monitoreo Base**, conversan, caminan y trabajan con sus smartphones; en un **Sismo Pequeño (4.2 Mw, 14 s)** reaccionan con precaución realista (*«¿Sintieron ese temblor? Mantengamos la calma»*); en un **Terremoto Fuerte (6.9 Mw, 22.5 s)** se agachan y cubren (*Drop, Cover & Hold On*), piden auxilio o evacúan piso por piso por la escalera de emergencia.
+- **Registro Visual Completo y Persistente de Ondas Sísmicas:**
+  - Tanto en el HUD 3D como en la Consola del Gateway puedes alternar entre **`📈 Evento Completo`** y **`🔴 En Vivo`**. El sismograma conserva y permite inspeccionar con el cursor **toda la traza registrada del terremoto o sismo pequeño después de que haya terminado** (Onda P, instante de disparo `STA/LTA ≥ 3.0` en `t₀`, Onda S, pico `PGA` y coda).
+- **Pantalla del Sniffer `modelo3d.stl` Calibrada al 100%:**
+  - La pantalla OLED dinámica cubre exactamente el marco frontal completo del modelo 3D (`modelo3d.stl`, 50,000 triángulos) tanto en el edificio 3D como en el visor CAD.
 
 ---
 
-## 3. Arquitectura Técnica: Raspberry Pi 5 (Python / MQTT) → Unity, Godot y WebXR
+## 3. Controles Rápidos
+
+- **`▶ INICIAR EXPERIENCIA COMO OPERARIO`**: Botón principal de arranque inmediato (o inicio directo con Sismo Pequeño / Terremoto).
+- **Tecla `B` o clic en el Poste de Luz**: Bajar / subir mecánicamente el **LPSBOX Gateway** del poste exterior (`4.65 m ↔ 1.18 m`).
+- **Tecla `E` o botón `Extraer Datos`**: Conectar por USB-C al Gateway (requiere haber bajado antes el Gateway del poste).
+- **Tecla `G`**: Simular un golpe físico directo sobre el acelerómetro `MPU6050` de la Raspberry Pi 5 (onda de choque MR).
+- **WASD + Ratón** (en modo cámara *Operario*): Caminar en primera persona alrededor del edificio y hasta el poste de luz.
+
+---
+
+## 4. Puente en Vivo con Raspberry Pi 5 (`python_rpi5_bridge/`)
 
 ```text
-[NODO SNIFFER ESP32 + MPU6050]                     [GATEWAY FÍSICO: RASPBERRY PI 5 + ESP32 RX]
- ├─ Captura WiFi/BLE Probe Requests (10s)           ├─ Recepción ESP-NOW / UART Serial (115200 bps)
- ├─ De-duplicación MAC Randomization (bit LAA) ───► ├─ Algoritmo STA/LTA + Base local SQLite / microSD
- └─ Muestreo I2C MPU6050 (200 Hz)                   ├─ Sincronización GPIO (LED Azul, Blink, Amarillo)
-                                                    └─ Broker Mosquitto / Puente Python:
-                                                         ├── MQTT TCP :1883  ──► Unity (Meta XR) / Godot 4 XR
-                                                         └── WebSocket :8765 ──► WebXR GitHub Pages (Three.js)
+[INTERIOR PISO 2: SNIFFER RASPBERRY PI 5 + MPU6050]        [EXTERIOR EN POSTE DE LUZ (4.65 m): LPSBOX GATEWAY]
+ ├─ WiFi/BLE Probe Requests + Filtro MAC Aleatoria (10s)    ├─ Receptor inalámbrico fuera de zona de colapso
+ ├─ Muestreo I2C MPU6050 + Disparo STA/LTA + Onda Completa  ├─ 3 LEDs Físicos (Azul / Mini Blink / Amarillo)
+ └─ MQTT (:1883) / WebSocket (:8765) ─────────────────────► └─ Descenso por polea (1.18 m) + Extracción USB-C
 ```
 
-### Cómo conectar una Raspberry Pi 5 real a este simulador
-1. En la Raspberry Pi 5, instala dependencias y ejecuta el puente incluido:
-   ```bash
-   pip install smbus2 gpiozero paho-mqtt websockets pyserial
-   python3 python_rpi5_bridge/rpi5_lpsbox_bridge.py --demo
-   ```
-   *(Quita `--demo` al leer datos reales de I2C/UART y los pines GPIO 17, 27 y 22).*
-2. Abre la pestaña **«📘 Pitch MR & Arquitectura RPi5»** en la aplicación web e ingresa `ws://<IP-DE-TU-RPI5>:8765` para enlazar el hardware en vivo.
-
----
-
-## 4. Estructura del Repositorio
-
-- `index.html`, `css/styles.css`, `js/` — Aplicación interactiva 3D / WebXR (Three.js, `STLLoader`, `OrbitControls`, Web Audio API, consola Gateway RPi5 y evaluador de operario).
-- `vendor/three/` — Módulos ESM de Three.js incluidos localmente para garantizar carga instantánea en GitHub Pages y redes universitarias sin depender de CDNs externos.
-- `modelo3d.stl` — Malla 3D de 50,000 triángulos cargada tanto en el Nodo Sniffer dentro del edificio 3D como en el inspector CAD dedicado.
-- `bozeto del gateway.jpg`, `bozeto del sniffer.jpg` — Bocetos originales a mano (Parte 2).
-- `lpsbox_gateway_v.png`, `bozeto del sniffer rediseño IA.jpg`, `usodeLMArena.jpg` — Rediseños industriales asistidos por IA (Parte 3).
-- `python_rpi5_bridge/rpi5_lpsbox_bridge.py` — Script Python 3 para Raspberry Pi 5 (filtro MAC 10s + STA/LTA + GPIO 3 LEDs + MQTT/WebSocket).
-- `.nojekyll` — Configuración para despliegue directo de archivos estáticos en GitHub Pages.
+Para enlazar una **Raspberry Pi 5** real o probar telemetría sintética en vivo:
+```bash
+pip install smbus2 gpiozero paho-mqtt websockets
+python3 python_rpi5_bridge/rpi5_lpsbox_bridge.py --demo
+```
+Luego abre la pestaña **«📘 Pitch MR & Arquitectura RPi5»** e ingresa `ws://<IP-DE-TU-RPI5>:8765`.

@@ -189,7 +189,7 @@ export class SoundEngine {
 
     pulse();
     let count = 0;
-    const maxPulses = severity === 'major' ? 11 : 4;
+    const maxPulses = severity === 'major' ? 18 : 6;
     this.alarmTimer = setInterval(() => {
       count++;
       if (count >= maxPulses) {
@@ -197,7 +197,120 @@ export class SoundEngine {
         return;
       }
       pulse();
-    }, severity === 'major' ? 680 : 950);
+    }, severity === 'major' ? 720 : 980);
+  }
+
+  playPoleWinch(direction = 'down') {
+    if (!this.ensureContext()) return;
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const g = this.ctx.createGain();
+    osc.type = 'sawtooth';
+    const startF = direction === 'down' ? 210 : 145;
+    const endF = direction === 'down' ? 135 : 225;
+    osc.frequency.setValueAtTime(startF, now);
+    osc.frequency.linearRampToValueAtTime(endF, now + 1.35);
+
+    const lp = this.ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 420;
+
+    g.gain.setValueAtTime(0.001, now);
+    g.gain.linearRampToValueAtTime(0.055, now + 0.12);
+    g.gain.setValueAtTime(0.05, now + 1.15);
+    g.gain.exponentialRampToValueAtTime(0.0008, now + 1.45);
+
+    osc.connect(lp);
+    lp.connect(g);
+    g.connect(this.ctx.destination);
+    osc.start(now);
+    osc.stop(now + 1.48);
+
+    // Mechanical latch click at end of travel
+    const clickOsc = this.ctx.createOscillator();
+    const clickGain = this.ctx.createGain();
+    clickOsc.type = 'triangle';
+    clickOsc.frequency.setValueAtTime(direction === 'down' ? 540 : 680, now + 1.42);
+    clickOsc.frequency.exponentialRampToValueAtTime(190, now + 1.54);
+    clickGain.gain.setValueAtTime(0.09, now + 1.42);
+    clickGain.gain.exponentialRampToValueAtTime(0.0008, now + 1.56);
+    clickOsc.connect(clickGain);
+    clickGain.connect(this.ctx.destination);
+    clickOsc.start(now + 1.42);
+    clickOsc.stop(now + 1.58);
+  }
+
+  playLockedBeep() {
+    if (!this.ensureContext()) return;
+    const now = this.ctx.currentTime;
+    [260, 210].forEach((freq, idx) => {
+      const osc = this.ctx.createOscillator();
+      const g = this.ctx.createGain();
+      osc.type = 'square';
+      osc.frequency.value = freq;
+      const t = now + idx * 0.11;
+      g.gain.setValueAtTime(0.045, t);
+      g.gain.exponentialRampToValueAtTime(0.0008, t + 0.09);
+      osc.connect(g);
+      g.connect(this.ctx.destination);
+      osc.start(t);
+      osc.stop(t + 0.1);
+    });
+  }
+
+  playPropCrash(intensity = 0.6) {
+    if (!this.ensureContext()) return;
+    const now = this.ctx.currentTime;
+    const amp = Math.min(1, Math.max(0.15, intensity));
+
+    // Low impact thud
+    const osc = this.ctx.createOscillator();
+    const g = this.ctx.createGain();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(115 + Math.random() * 45, now);
+    osc.frequency.exponentialRampToValueAtTime(28, now + 0.24);
+    g.gain.setValueAtTime(0.14 * amp, now);
+    g.gain.exponentialRampToValueAtTime(0.0008, now + 0.27);
+    osc.connect(g);
+    g.connect(this.ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.28);
+
+    // Short metallic/debris rattle burst
+    const len = Math.floor(this.ctx.sampleRate * 0.16);
+    const buf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) {
+      data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (len * 0.35));
+    }
+    const src = this.ctx.createBufferSource();
+    src.buffer = buf;
+    const bp = this.ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = 950 + Math.random() * 900;
+    bp.Q.value = 1.4;
+    const ng = this.ctx.createGain();
+    ng.gain.value = 0.09 * amp;
+    src.connect(bp);
+    bp.connect(ng);
+    ng.connect(this.ctx.destination);
+    src.start(now);
+  }
+
+  playElectricSpark() {
+    if (!this.ensureContext()) return;
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const g = this.ctx.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(2400, now);
+    osc.frequency.exponentialRampToValueAtTime(420, now + 0.08);
+    g.gain.setValueAtTime(0.04, now);
+    g.gain.exponentialRampToValueAtTime(0.0005, now + 0.09);
+    osc.connect(g);
+    g.connect(this.ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.095);
   }
 
   stopAlarmLoop() {

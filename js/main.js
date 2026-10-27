@@ -1,47 +1,38 @@
-// js/main.js — Controlador principal UI, Pantalla de Inicio, Consola Gateway RPi5, Mapa RSSI y WebXR
+// js/main.js — Controlador principal UI + WebXR + Consola Gateway en Poste + Sismograma Completo Persistente
 
-import { SoundEngine } from './audio.js';
-import { LPSBoxSimulation, ZONES, ASSEMBLY_POINT, GATEWAY_WORLD_POS } from './simulation.js';
+import { FLOOR_HEIGHT, ZONES, LPSBoxSimulation } from './simulation.js';
 import { LPSBoxScene3D } from './scene3d.js';
+import { SoundEngine } from './audio.js';
 import { StlCadInspector } from './stlViewer.js';
 
-// ================= 1. REFERENCIAS DOM (DECLARADAS ARRIBA SIN TDZ) =================
-const simCanvasWrap = document.getElementById('sim-canvas-wrap');
-const cadCanvasWrap = document.getElementById('cad-canvas-wrap');
+// ================= 0. REFERENCIAS DOM Y ESTADO GLOBAL (DECLARADOS ANTES DE INICIALIZAR) =================
+const canvasContainer = document.getElementById('sim-canvas-wrap');
+const startOverlay = document.getElementById('start-experience-overlay');
+const btnStartExperience = document.getElementById('btn-start-experience');
+const btnStartMild = document.getElementById('btn-start-mild');
+const btnStartMajor = document.getElementById('btn-start-major');
+const startStlStatus = document.getElementById('start-stl-status');
+
 const stlBanner = document.getElementById('stl-loading-banner');
 const stlText = document.getElementById('stl-loading-text');
 
-const startOverlay = document.getElementById('start-experience-overlay');
-const startStlStatus = document.getElementById('start-stl-status');
-const btnStartExp = document.getElementById('btn-start-experience');
-const btnStartMild = document.getElementById('btn-start-mild');
-const btnStartMajor = document.getElementById('btn-start-major');
-
 const navTabs = document.querySelectorAll('.nav-tab');
-const panelViews = {
-  console: document.getElementById('view-console'),
-  docs: document.getElementById('view-docs'),
-  gallery: document.getElementById('view-gallery')
-};
+const simHud = document.getElementById('sim-hud');
+const bottomTicker = document.getElementById('bottom-ticker');
+const viewConsole = document.getElementById('view-console');
+const viewDocs = document.getElementById('view-docs');
+const viewGallery = document.getElementById('view-gallery');
 
 const tickerLog = document.getElementById('ticker-log');
 const tickerClock = document.getElementById('ticker-clock');
 
-const elLedBlue = document.getElementById('led-blue');
-const elLedBlink = document.getElementById('led-blink');
-const elLedYellow = document.getElementById('led-yellow');
-const elNavDot = document.getElementById('nav-gateway-dot');
-const elBtnExtract = document.getElementById('btn-extract-gateway');
-const elBtnToggleHolo = document.getElementById('btn-toggle-holo');
+const btnAudio = document.getElementById('btn-audio');
+const btnXr = document.getElementById('btn-xr');
 
-const elOledBox = document.getElementById('hud-sniffer-oled');
-const elOledSta = document.getElementById('oled-sta');
-const elOledTitle = document.getElementById('oled-title');
-const elOledSub = document.getElementById('oled-sub');
-const elStatAccel = document.getElementById('stat-accel');
-const elStatStaLta = document.getElementById('stat-stalta');
-const miniSeismoCanvas = document.getElementById('mini-seismo-canvas');
-const miniSeismoCtx = miniSeismoCanvas ? miniSeismoCanvas.getContext('2d') : null;
+const btnScNormal = document.getElementById('btn-sc-normal');
+const btnScMild = document.getElementById('btn-sc-mild');
+const btnScMajor = document.getElementById('btn-sc-major');
+const btnScHit = document.getElementById('btn-sc-hit');
 
 const pillChallenge = document.getElementById('pill-challenge');
 const pillSandbox = document.getElementById('pill-sandbox');
@@ -53,124 +44,179 @@ const valMag = document.getElementById('val-mag');
 const selectNoise = document.getElementById('select-mac-noise');
 const valNoise = document.getElementById('val-noise');
 
+const camButtons = document.querySelectorAll('.cam-btn');
+const chkMrVision = document.getElementById('chk-mr-vision');
+
+const elLedBlue = document.getElementById('led-blue');
+const elLedBlink = document.getElementById('led-blink');
+const elLedYellow = document.getElementById('led-yellow');
+const elNavDot = document.getElementById('nav-gateway-dot');
+const elBtnExtract = document.getElementById('btn-extract-gateway');
+const elBtnToggleHolo = document.getElementById('btn-toggle-holo');
+
+const elPoleHeightVal = document.getElementById('pole-height-val');
+const elPoleStatePill = document.getElementById('pole-state-pill');
+const elBtnLowerPole = document.getElementById('btn-lower-pole');
+const elConsolePoleLock = document.getElementById('console-pole-lock');
+const elBtnConsoleLowerPole = document.getElementById('btn-console-lower-pole');
+
+const elOledBox = document.getElementById('hud-sniffer-oled');
+const elOledSta = document.getElementById('oled-sta');
+const elOledTitle = document.getElementById('oled-title');
+const elOledSub = document.getElementById('oled-sub');
+const elStatAccel = document.getElementById('stat-accel');
+const elStatStaLta = document.getElementById('stat-stalta');
+
+const btnSeismoEvent = document.getElementById('btn-seismo-event');
+const btnSeismoLive = document.getElementById('btn-seismo-live');
+const btnConsoleSeismoEvent = document.getElementById('btn-console-seismo-event');
+const btnConsoleSeismoLive = document.getElementById('btn-console-seismo-live');
+const elHudSeismoTag = document.getElementById('hud-seismo-tag');
+const elSeismoHoverReadout = document.getElementById('seismo-hover-readout');
+
+const miniSeismoCanvas = document.getElementById('mini-seismo-canvas');
+const miniSeismoCtx = miniSeismoCanvas ? miniSeismoCanvas.getContext('2d') : null;
+const fullSeismoCanvas = document.getElementById('full-seismo-canvas');
+const fullSeismoCtx = fullSeismoCanvas ? fullSeismoCanvas.getContext('2d') : null;
+
 const chkMacFilter = document.getElementById('chk-mac-filter');
 const rssiCanvas = document.getElementById('rssi-map-canvas');
 const rssiCtx = rssiCanvas ? rssiCanvas.getContext('2d') : null;
 
 const zoneInputs = ['a', 'b', 'c', 'd'].map((k) => document.getElementById(`inp-zone-${k}`));
 const zoneSumHelper = document.getElementById('zone-sum-helper');
-
 const lightbox = document.getElementById('img-lightbox');
 const lightboxImg = document.getElementById('lightbox-img');
-
-const btnAudio = document.getElementById('btn-audio');
-const btnXr = document.getElementById('btn-xr');
-const btnWs = document.getElementById('btn-ws-connect');
 const wsInput = document.getElementById('ws-url-input');
+const wsBtn = document.getElementById('btn-ws-connect');
 const wsStatus = document.getElementById('ws-status');
 
-// ================= 2. ESTADO GLOBAL DE APLICACIÓN =================
-const sound = new SoundEngine();
 let activeView = 'sim';
 let experienceStarted = false;
-let consoleRefreshTimer = 0;
+let xrSession = null;
 let wsClient = null;
-let currentXrSession = null;
+let consoleRefreshTimer = 0;
 
-function appendLogEntry({ time = 0, text = '', level = 'info' }) {
+// Seismogram display mode: 'live' | 'event' (auto-switches to 'event' when a quake/hit occurs!)
+let seismoViewMode = 'live';
+let seismoHoverNormX = null; // 0..1 when hovering full-seismo-canvas
+
+function appendLogEntry({ time, text, level }) {
   if (!tickerLog) return;
   const div = document.createElement('div');
-  div.className = `ticker-entry ${level}`;
-  div.innerHTML = `<span class="ts">[${Number(time).toFixed(1)}s]</span>${text}`;
+  div.className = `ticker-entry ${level || 'info'}`;
+  div.innerHTML = `<span class="ts">[${time.toFixed(1)}s]</span>${text}`;
   tickerLog.prepend(div);
-  while (tickerLog.children.length > 24) {
+  while (tickerLog.children.length > 28) {
     tickerLog.removeChild(tickerLog.lastChild);
   }
 }
 
-function syncScenarioButtons(sc) {
-  const bNorm = document.getElementById('btn-sc-normal');
-  const bMild = document.getElementById('btn-sc-mild');
-  const bMajor = document.getElementById('btn-sc-major');
-  if (bNorm) bNorm.classList.toggle('active', sc === 'normal');
-  if (bMild) bMild.classList.toggle('active', sc === 'mild');
-  if (bMajor) bMajor.classList.toggle('active', sc === 'major');
+function setSeismoMode(mode) {
+  seismoViewMode = mode;
+  const isEvent = mode === 'event';
+  btnSeismoEvent?.classList.toggle('active', isEvent);
+  btnSeismoLive?.classList.toggle('active', !isEvent);
+  btnConsoleSeismoEvent?.classList.toggle('active', isEvent);
+  btnConsoleSeismoLive?.classList.toggle('active', !isEvent);
 }
 
-function syncCameraButtons(mode) {
-  document.querySelectorAll('.cam-btn').forEach((b) => {
-    b.classList.toggle('active', b.dataset.cam === mode);
-  });
-}
+// ================= 1. INSTANCIACIÓN DE MOTORES =================
+const sound = new SoundEngine();
+let scene3d = null;
+let sim = null;
 
-// ================= 3. INICIALIZACIÓN MOTOR SIMULACIÓN Y ESCENA 3D =================
-const sim = new LPSBoxSimulation({
+sim = new LPSBoxSimulation({
   onLog: (entry) => appendLogEntry(entry),
-  onScenarioChange: (sc) => syncScenarioButtons(sc),
+  onScenarioChange: (sc) => updateScenarioButtonsUI(sc),
   onSnapshotCaptured: (snap) => {
     if (experienceStarted) {
+      sound.startSnifferAlarm(snap.scenario === 'major' ? 'major' : 'mild');
       if (snap.scenario === 'major') {
-        sound.startSnifferAlarm('major');
         sound.speakSnifferVoice(
-          'Alerta sísmica severa detectada. Enviando datos de ocupación al Gateway. Evacúe de inmediato.'
+          'Alerta sísmica severa en edificio. Enviando conteo de los cuatro pisos al Gateway del poste exterior. Evacúen por la escalera.'
         );
       } else {
-        sound.startSnifferAlarm('mild');
         sound.speakSnifferVoice(
-          'Sismo leve detectado. Enviando datos preventivos al Gateway. Mantenga la calma.'
+          'Sismo leve detectado por Raspberry Pi cinco. Mantengan la calma, enviando registro preventivo al poste.'
         );
       }
     }
+    if (elBtnToggleHolo) elBtnToggleHolo.style.display = 'inline-flex';
+    setSeismoMode('event');
     refreshConsoleData();
   },
-  onTableHit: () => {
-    sound.playTableShockwave();
-  },
   onPacketHeartbeat: () => {
-    if (experienceStarted && activeView === 'sim' && !sim.quakeActive) {
-      if (sound.ctx && !sound.muted) sound.playPacketBlip();
+    if (sim && activeView === 'sim' && experienceStarted && !sim.quakeActive) {
+      sound.playPacketBlip();
     }
+  },
+  onTableHit: () => {
+    if (experienceStarted) {
+      sound.playTableShockwave();
+    }
+    setSeismoMode('event');
+  },
+  onGatewayPoleChange: (poleState) => {
+    syncPoleUI();
+    if (sim && activeView === 'console' && poleState === 'down') {
+      sim.dataExtractedByOperator = true;
+      if (experienceStarted) sound.playUsbConnect();
+      refreshConsoleData();
+    }
+  },
+  onEventRecordUpdate: () => {
+    setSeismoMode('event');
+    if (activeView === 'console') refreshConsoleData();
+  },
+  onPropsReset: () => {
+    scene3d?.resetDynamicProps();
+  },
+  onCollapse: () => {
+    refreshConsoleData();
   }
 });
+syncPoleUI();
 
-let scene3d = null;
 try {
-  scene3d = new LPSBoxScene3D(simCanvasWrap, sim, {
+  scene3d = new LPSBoxScene3D(canvasContainer, sim, {
+    onGatewayClick: () => openGatewayExtraction(),
+    onPoleClick: () => handlePoleToggleAction(),
+    onSnifferClick: () => {
+      scene3d.setCameraMode('sniffer');
+      syncCameraButtons('sniffer');
+      appendLogEntry({
+        time: sim.time,
+        text: 'Inspeccionando Nodo Sniffer (modelo3d.stl + Raspberry Pi 5 + MPU6050) en Piso 2.',
+        level: 'info'
+      });
+    },
+    onPropImpact: (intensity) => {
+      if (experienceStarted) sound.playPropCrash(intensity);
+    },
+    onElectricSpark: () => {
+      if (experienceStarted) sound.playElectricSpark();
+    },
     onStlReady: () => {
-      if (stlText) stlText.textContent = '✓ modelo3d.stl cargado en el Nodo Sniffer 3D';
-      if (startStlStatus) {
-        startStlStatus.textContent = '✓ ESCENA 3D ACTIVA · MODELO3D.STL LISTO (50,000 TRIÁNGULOS)';
+      if (stlText) {
+        stlText.textContent = '✓ Malla ./modelo3d.stl cargada (50,000 tris) + Pantalla calibrada al 100%';
       }
-      setTimeout(() => stlBanner?.classList.add('hidden'), 1400);
-    },
-    onStlError: () => {
-      stlBanner?.classList.add('hidden');
-    },
-    onExtractGateway: () => openGatewayConsole(),
-    onHitDesk: () => {
-      sound.ensureContext();
-      sim.triggerPhysicalTableHit();
-    },
-    onCameraModeChanged: (camMode) => syncCameraButtons(camMode)
+      if (startStlStatus) {
+        startStlStatus.textContent = '● MODELO 3D ./modelo3d.stl LISTO · EDIFICIO 4 PISOS ACTIVO';
+      }
+      setTimeout(() => {
+        stlBanner?.classList.add('hidden');
+      }, 1500);
+    }
   });
 } catch (err) {
-  stlBanner?.classList.add('hidden');
-  appendLogEntry({
-    time: 0,
-    text: `Aviso WebGL: ${err.message || 'Renderizador limitado en este navegador'}. Consola de telemetría disponible.`,
-    level: 'warn'
-  });
+  console.error('Error inicializando escena 3D WebGL:', err);
+  if (stlText) stlText.textContent = 'Aviso: WebGL limitado en este navegador; consola operativa.';
 }
 
-const cadInspector = new StlCadInspector(cadCanvasWrap);
+const cadInspector = new StlCadInspector(document.getElementById('cad-canvas-wrap'));
 
-appendLogEntry({
-  time: 0,
-  text: 'Sistema LPSBOX en línea. Pulsa «Iniciar Experiencia» para tomar el mando como Operario.',
-  level: 'ok'
-});
-
-// ================= 4. BOTÓN DE INICIO DE LA EXPERIENCIA =================
+// ================= 2. PANTALLA DE INICIO ("INICIAR EXPERIENCIA") =================
 function startExperience(initialScenario = null) {
   experienceStarted = true;
   sound.ensureContext();
@@ -185,69 +231,165 @@ function startExperience(initialScenario = null) {
     syncCameraButtons('tactical');
   }
 
+  appendLogEntry({
+    time: sim.time,
+    text: 'Experiencia iniciada: Edificio de 4 pisos en monitoreo. Recuerda bajar el Gateway del poste de luz [B] tras un sismo.',
+    level: 'ok'
+  });
+
   if (initialScenario === 'mild') {
+    setSeismoMode('event');
     sim.triggerSeismicScenario('mild');
   } else if (initialScenario === 'major') {
+    setSeismoMode('event');
     sim.triggerSeismicScenario('major');
-  } else {
-    appendLogEntry({
-      time: sim.time,
-      text: 'Turno de Operario iniciado. Selecciona «Sismo Tranqui» o «Terremoto Severo» en el panel izquierdo.',
-      level: 'ok'
-    });
   }
 }
 
-btnStartExp?.addEventListener('click', () => startExperience(null));
+btnStartExperience?.addEventListener('click', () => startExperience(null));
 btnStartMild?.addEventListener('click', () => startExperience('mild'));
 btnStartMajor?.addEventListener('click', () => startExperience('major'));
 
-// ================= 5. NAVEGACIÓN ENTRE VISTAS =================
-function switchView(viewName) {
-  if (!experienceStarted && startOverlay) {
-    experienceStarted = true;
-    startOverlay.classList.add('dismissed');
-    scene3d?.stopIntroOrbit();
-  }
-  activeView = viewName;
-  navTabs.forEach((btn) => {
-    btn.classList.toggle('active', btn.dataset.view === viewName);
-  });
-  Object.entries(panelViews).forEach(([k, el]) => {
-    if (el) el.classList.toggle('active', k === viewName);
-  });
+// ================= 3. NAVEGACIÓN DE VISTAS Y POLEA DEL POSTE DE LUZ =================
+function switchView(view) {
+  activeView = view;
+  navTabs.forEach((t) => t.classList.toggle('active', t.dataset.view === view));
 
-  if (viewName === 'console') {
-    sim.dataExtractedByOperator = true;
+  const isSim = view === 'sim';
+  if (simHud) simHud.style.display = isSim ? 'flex' : 'none';
+  if (bottomTicker) bottomTicker.style.display = isSim ? '' : 'none';
+
+  viewConsole?.classList.toggle('active', view === 'console');
+  viewDocs?.classList.toggle('active', view === 'docs');
+  viewGallery?.classList.toggle('active', view === 'gallery');
+
+  if (view === 'console') {
+    if (sim.canExtractGateway()) {
+      sim.dataExtractedByOperator = true;
+    }
+    syncPoleUI();
     refreshConsoleData();
-  } else if (viewName === 'gallery') {
+  } else if (view === 'gallery') {
     cadInspector.initIfNeeded();
   }
 }
 
-navTabs.forEach((btn) => {
-  btn.addEventListener('click', () => {
+navTabs.forEach((tab) => {
+  tab.addEventListener('click', () => {
     sound.ensureContext();
-    if (btn.dataset.view === 'console') {
-      sound.playUsbConnect();
+    if (!experienceStarted && startOverlay) {
+      experienceStarted = true;
+      startOverlay.classList.add('dismissed');
+      scene3d?.stopIntroOrbit();
     }
-    switchView(btn.dataset.view);
+    switchView(tab.dataset.view);
   });
 });
 
 document.getElementById('btn-back-sim')?.addEventListener('click', () => switchView('sim'));
-document.querySelectorAll('[data-goto-sim]').forEach((b) => {
-  b.addEventListener('click', () => switchView('sim'));
+document.querySelectorAll('[data-goto-sim]').forEach((btn) => {
+  btn.addEventListener('click', () => switchView('sim'));
 });
 
-function openGatewayConsole() {
-  sound.ensureContext();
-  sound.playUsbConnect();
-  switchView('console');
+function syncPoleUI() {
+  if (!sim) return;
+  const st = sim.gatewayPoleState;
+  if (elPoleHeightVal) {
+    elPoleHeightVal.textContent = `${sim.gatewayHeight.toFixed(2)} m`;
+  }
+  if (elPoleStatePill) {
+    elPoleStatePill.classList.remove('is-down', 'is-moving');
+    if (st === 'down') {
+      elPoleStatePill.textContent = '✅ ABAJO (USB-C)';
+      elPoleStatePill.classList.add('is-down');
+    } else if (st === 'lowering') {
+      elPoleStatePill.textContent = '⏳ BAJANDO...';
+      elPoleStatePill.classList.add('is-moving');
+    } else if (st === 'raising') {
+      elPoleStatePill.textContent = '⏳ SUBIENDO...';
+      elPoleStatePill.classList.add('is-moving');
+    } else {
+      elPoleStatePill.textContent = '⬆️ EN POSTE';
+    }
+  }
+  if (elBtnLowerPole) {
+    if (st === 'down') {
+      elBtnLowerPole.textContent = '⬆️ Subir Gateway al Poste [B]';
+      elBtnLowerPole.classList.remove('btn-pulse-attention');
+    } else if (st === 'lowering') {
+      elBtnLowerPole.textContent = '⏳ Descendiendo del poste...';
+      elBtnLowerPole.classList.remove('btn-pulse-attention');
+    } else if (st === 'raising') {
+      elBtnLowerPole.textContent = '⏳ Subiendo al poste...';
+    } else {
+      elBtnLowerPole.textContent = '🪜 Bajar Gateway del Poste de Luz [B]';
+    }
+  }
+  if (elConsolePoleLock) {
+    elConsolePoleLock.classList.toggle('visible', st !== 'down');
+  }
 }
 
-elBtnExtract?.addEventListener('click', openGatewayConsole);
+function handlePoleToggleAction(forceLower = false) {
+  sound.ensureContext();
+  if (forceLower || sim.gatewayPoleState === 'up' || sim.gatewayPoleState === 'raising') {
+    sound.playPoleWinch('down');
+    sim.lowerGatewayFromPole();
+  } else {
+    sound.playPoleWinch('up');
+    sim.raiseGatewayToPole();
+  }
+  syncPoleUI();
+}
 
+elBtnLowerPole?.addEventListener('click', () => handlePoleToggleAction(false));
+elBtnConsoleLowerPole?.addEventListener('click', () => handlePoleToggleAction(true));
+
+function openGatewayExtraction() {
+  sound.ensureContext();
+  if (!sim.canExtractGateway()) {
+    sound.playLockedBeep();
+    elBtnLowerPole?.classList.add('btn-pulse-attention');
+    if (scene3d && activeView === 'sim') {
+      scene3d.setCameraMode('gateway');
+      syncCameraButtons('gateway');
+    }
+    appendLogEntry({
+      time: sim.time,
+      text: '🔒 El Gateway está a 4.65 m en el poste de luz exterior. Bájalo primero con [🪜 Bajar Gateway del Poste] o tecla [B] antes de extraer los datos.',
+      level: 'warn'
+    });
+    return;
+  }
+
+  sound.playUsbConnect();
+  sim.dataExtractedByOperator = true;
+  switchView('console');
+  appendLogEntry({
+    time: sim.time,
+    text: 'Cable USB-C conectado al Gateway (1.18 m al pie del poste): registros descargados con éxito.',
+    level: 'ok'
+  });
+}
+
+elBtnExtract?.addEventListener('click', openGatewayExtraction);
+
+window.addEventListener('keydown', (e) => {
+  if (document.activeElement && ['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement.tagName)) {
+    return;
+  }
+  const k = e.key.toLowerCase();
+  if (k === 'b') {
+    handlePoleToggleAction(false);
+  } else if (k === 'e') {
+    openGatewayExtraction();
+  } else if (k === 'g') {
+    sound.ensureContext();
+    sim.triggerPhysicalTableHit();
+  }
+});
+
+// ================= 4. COLAPSABLES DEL HUD =================
 document.querySelectorAll('[data-collapse]').forEach((btn) => {
   btn.addEventListener('click', () => {
     const card = document.getElementById(btn.dataset.collapse);
@@ -257,109 +399,98 @@ document.querySelectorAll('[data-collapse]').forEach((btn) => {
   });
 });
 
-// ================= 6. AUDIO Y MODO VR / MR (WebXR) =================
+// ================= 5. AUDIO Y SESIÓN WEBXR (VR / MR) =================
 btnAudio?.addEventListener('click', () => {
   sound.ensureContext();
   sound.setMuted(!sound.muted);
-  btnAudio.textContent = sound.muted ? '🔇 Silencio' : '🔊 Audio';
+  btnAudio.textContent = sound.muted ? '🔇 Silenciado' : '🔊 Audio';
 });
 
-btnXr?.addEventListener('click', async () => {
-  if (!experienceStarted) startExperience(null);
-  sound.ensureContext();
-  if (!scene3d || !('xr' in navigator)) {
-    appendLogEntry({
-      time: sim.time,
-      text: 'WebXR requiere Meta Quest Browser o visor XR compatible. Activando cámara Operario en 1ra Persona (WASD).',
-      level: 'warn'
-    });
-    scene3d?.setCameraMode('firstperson');
-    syncCameraButtons('firstperson');
+async function toggleWebXR() {
+  if (!scene3d) return;
+  if (!('xr' in navigator)) {
+    alert(
+      'WebXR nativo requiere un navegador compatible (ej. Meta Quest Browser en Quest 2/3/Pro o Chrome Android AR). El modo 3D interactivo de escritorio está completamente activo.'
+    );
     return;
   }
-
   try {
-    if (currentXrSession) {
-      await currentXrSession.end();
+    if (xrSession) {
+      await xrSession.end();
       return;
     }
-    const arOk = await navigator.xr.isSessionSupported('immersive-ar').catch(() => false);
-    const vrOk = await navigator.xr.isSessionSupported('immersive-vr').catch(() => false);
-    const mode = arOk ? 'immersive-ar' : vrOk ? 'immersive-vr' : null;
-
+    const arSupported = await navigator.xr.isSessionSupported('immersive-ar').catch(() => false);
+    const vrSupported = await navigator.xr.isSessionSupported('immersive-vr').catch(() => false);
+    const mode = arSupported ? 'immersive-ar' : vrSupported ? 'immersive-vr' : null;
     if (!mode) {
-      appendLogEntry({
-        time: sim.time,
-        text: 'No se detectó casco VR/MR conectado. Activando modo Operario en 1ra Persona (WASD).',
-        level: 'info'
-      });
-      scene3d.setCameraMode('firstperson');
-      syncCameraButtons('firstperson');
+      alert('No se detectó un visor VR/MR conectado en este dispositivo.');
       return;
     }
 
     const session = await navigator.xr.requestSession(mode, {
       optionalFeatures: ['local-floor', 'bounded-floor', 'hand-tracking']
     });
-    currentXrSession = session;
-    btnXr.classList.add('active-xr');
-    btnXr.textContent = '⏹ Salir XR';
+    xrSession = session;
     if (mode === 'immersive-ar') {
       scene3d.scene.background = null;
     }
     await scene3d.renderer.xr.setSession(session);
+    if (btnXr) btnXr.textContent = '⏹ Salir XR';
     session.addEventListener('end', () => {
-      currentXrSession = null;
-      btnXr.classList.remove('active-xr');
-      btnXr.textContent = '🥽 Entrar VR / MR';
+      xrSession = null;
       scene3d.restoreBackground();
+      if (btnXr) btnXr.textContent = '🥽 Entrar VR / MR';
     });
   } catch (err) {
-    appendLogEntry({
-      time: sim.time,
-      text: `Sesión XR no iniciada (${err.message || 'visor no disponible'}). Modo 3D escritorio activo.`,
-      level: 'warn'
-    });
+    alert(`No fue posible iniciar sesión WebXR: ${err.message}`);
   }
-});
+}
 
-// ================= 7. CONTROLADOR DE ESCENARIOS SÍSMICOS =================
-document.getElementById('btn-sc-normal')?.addEventListener('click', () => {
-  if (!experienceStarted) startExperience(null);
+btnXr?.addEventListener('click', toggleWebXR);
+
+// ================= 6. CONTROL DE ESCENARIOS Y PARÁMETROS =================
+function updateScenarioButtonsUI(sc) {
+  btnScNormal?.classList.toggle('active', sc === 'normal');
+  btnScMild?.classList.toggle('active', sc === 'mild');
+  btnScMajor?.classList.toggle('active', sc === 'major');
+}
+
+btnScNormal?.addEventListener('click', () => {
   sound.ensureContext();
   sound.stopAlarmLoop();
   sim.setNormalMonitoring();
-  if (elBtnToggleHolo) elBtnToggleHolo.style.display = 'none';
 });
 
-document.getElementById('btn-sc-mild')?.addEventListener('click', () => {
-  if (!experienceStarted) startExperience(null);
+btnScMild?.addEventListener('click', () => {
   sound.ensureContext();
+  setSeismoMode('event');
   sim.triggerSeismicScenario('mild');
 });
 
-document.getElementById('btn-sc-major')?.addEventListener('click', () => {
-  if (!experienceStarted) startExperience(null);
+btnScMajor?.addEventListener('click', () => {
   sound.ensureContext();
+  setSeismoMode('event');
   sim.triggerSeismicScenario('major');
 });
 
-document.getElementById('btn-sc-hit')?.addEventListener('click', () => {
-  if (!experienceStarted) startExperience(null);
+btnScHit?.addEventListener('click', () => {
   sound.ensureContext();
+  setSeismoMode('event');
   sim.triggerPhysicalTableHit();
 });
 
 document.getElementById('btn-console-mild')?.addEventListener('click', () => {
   sound.ensureContext();
+  setSeismoMode('event');
   sim.triggerSeismicScenario('mild');
-  setTimeout(refreshConsoleData, 950);
+  switchView('sim');
 });
 
 document.getElementById('btn-console-major')?.addEventListener('click', () => {
   sound.ensureContext();
+  setSeismoMode('event');
   sim.triggerSeismicScenario('major');
-  setTimeout(refreshConsoleData, 950);
+  switchView('sim');
 });
 
 pillChallenge?.addEventListener('click', () => {
@@ -375,14 +506,14 @@ pillSandbox?.addEventListener('click', () => {
   pillSandbox.classList.add('active');
   pillChallenge?.classList.remove('active');
   if (sandboxControls) sandboxControls.style.display = 'block';
-  if (sliderPeople) sliderPeople.value = String(sim.people.length);
-  if (valPeople) valPeople.textContent = String(sim.people.length);
+  sim.spawnWithTotalCount(Number(sliderPeople?.value || 18));
 });
 
 sliderPeople?.addEventListener('input', () => {
-  const n = Number(sliderPeople.value);
-  if (valPeople) valPeople.textContent = String(n);
-  sim.spawnWithTotalCount(n);
+  if (valPeople) valPeople.textContent = sliderPeople.value;
+  if (!sim.challengeMode) {
+    sim.spawnWithTotalCount(Number(sliderPeople.value));
+  }
 });
 
 sliderMag?.addEventListener('input', () => {
@@ -391,56 +522,103 @@ sliderMag?.addEventListener('input', () => {
 });
 
 document.getElementById('btn-trigger-custom')?.addEventListener('click', () => {
-  if (!experienceStarted) startExperience(null);
   sound.ensureContext();
-  sim.triggerSeismicScenario('custom', Number(sliderMag.value));
+  setSeismoMode('event');
+  sim.triggerSeismicScenario('custom', Number(sliderMag?.value || 6.5));
 });
 
 selectNoise?.addEventListener('change', () => {
   sim.macNoiseLevel = selectNoise.value;
-  if (valNoise) {
-    valNoise.textContent =
-      selectNoise.value === 'low' ? 'Bajo' : selectNoise.value === 'high' ? 'Alto' : 'Medio';
-  }
+  const labels = { low: 'Bajo', medium: 'Medio', high: 'Alto' };
+  if (valNoise) valNoise.textContent = labels[selectNoise.value] || 'Medio';
 });
 
 document.getElementById('btn-new-mission')?.addEventListener('click', () => {
-  if (!experienceStarted) startExperience(null);
-  sound.ensureContext();
   sound.stopAlarmLoop();
   sim.spawnMissionRandom();
+  syncPoleUI();
   document.getElementById('report-result')?.classList.remove('visible');
-  if (elBtnToggleHolo) elBtnToggleHolo.style.display = 'none';
-  if (!sim.challengeMode) {
-    if (sliderPeople) sliderPeople.value = String(sim.people.length);
-    if (valPeople) valPeople.textContent = String(sim.people.length);
-  }
 });
 
-document.querySelectorAll('.cam-btn').forEach((btn) => {
+// ================= 7. CÁMARAS Y VISIÓN MR =================
+function syncCameraButtons(mode) {
+  camButtons.forEach((b) => b.classList.toggle('active', b.dataset.cam === mode));
+}
+
+camButtons.forEach((btn) => {
   btn.addEventListener('click', () => {
-    if (!experienceStarted) startExperience(null);
-    scene3d?.setCameraMode(btn.dataset.cam);
-    syncCameraButtons(btn.dataset.cam);
+    const mode = btn.dataset.cam;
+    scene3d?.setCameraMode(mode);
+    syncCameraButtons(mode);
   });
 });
 
-document.getElementById('chk-mr-vision')?.addEventListener('change', (e) => {
-  if (scene3d) scene3d.mrVisionEnabled = e.target.checked;
+chkMrVision?.addEventListener('change', () => {
+  if (scene3d) scene3d.mrVisionEnabled = chkMrVision.checked;
 });
 
 elBtnToggleHolo?.addEventListener('click', () => {
   sim.showPreQuakeHologram = !sim.showPreQuakeHologram;
 });
 
-// ================= 8. SINCRONIZACIÓN HUD Y SISMÓGRAFO =================
+// ================= 8. SISMOGRAMA PERSISTENTE DEL EVENTO + MODO EN VIVO =================
+btnSeismoEvent?.addEventListener('click', () => setSeismoMode('event'));
+btnSeismoLive?.addEventListener('click', () => setSeismoMode('live'));
+btnConsoleSeismoEvent?.addEventListener('click', () => {
+  setSeismoMode('event');
+  refreshConsoleData();
+});
+btnConsoleSeismoLive?.addEventListener('click', () => {
+  setSeismoMode('live');
+  refreshConsoleData();
+});
+
+fullSeismoCanvas?.addEventListener('mousemove', (e) => {
+  const rect = fullSeismoCanvas.getBoundingClientRect();
+  seismoHoverNormX = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+  if (activeView === 'console') {
+    drawSeismogram(fullSeismoCtx, fullSeismoCanvas.width, fullSeismoCanvas.height, true);
+  }
+});
+
+fullSeismoCanvas?.addEventListener('mouseleave', () => {
+  seismoHoverNormX = null;
+  if (elSeismoHoverReadout) {
+    elSeismoHoverReadout.textContent =
+      'Pasa el cursor sobre la gráfica para inspeccionar aceleración (g) y relación STA/LTA segundo a segundo.';
+  }
+  if (activeView === 'console') {
+    drawSeismogram(fullSeismoCtx, fullSeismoCanvas.width, fullSeismoCanvas.height, true);
+  }
+});
+
 function drawSeismogram(ctx, w, h, detailed = false) {
   if (!ctx) return;
   ctx.fillStyle = '#050a12';
   ctx.fillRect(0, 0, w, h);
 
-  const threshY = h - (3.0 / 10.0) * (h - 10) - 5;
-  ctx.strokeStyle = 'rgba(239, 68, 68, 0.45)';
+  const eventRec = sim.getEventSeismogram();
+  const useEventMode = seismoViewMode === 'event' && Boolean(eventRec) && eventRec.samples.length >= 2;
+
+  const padTop = detailed ? 24 : 8;
+  const padBottom = detailed ? 22 : 13;
+  const plotH = h - padTop - padBottom;
+
+  // Subtle horizontal grid
+  ctx.strokeStyle = 'rgba(56, 189, 248, 0.08)';
+  ctx.lineWidth = 1;
+  for (let i = 1; i <= 3; i++) {
+    const gy = padTop + (plotH * i) / 4;
+    ctx.beginPath();
+    ctx.moveTo(0, gy);
+    ctx.lineTo(w, gy);
+    ctx.stroke();
+  }
+
+  // STA/LTA = 3.0 trigger threshold line
+  const maxRatioScale = 10.5;
+  const threshY = padTop + plotH * (1 - 3.0 / maxRatioScale);
+  ctx.strokeStyle = 'rgba(239, 68, 68, 0.55)';
   ctx.setLineDash([4, 4]);
   ctx.beginPath();
   ctx.moveTo(0, threshY);
@@ -448,10 +626,168 @@ function drawSeismogram(ctx, w, h, detailed = false) {
   ctx.stroke();
   ctx.setLineDash([]);
 
-  if (detailed) {
+  if (useEventMode) {
+    const samples = eventRec.samples;
+    const minT = samples[0].tRel;
+    const lastSampleT = samples[samples.length - 1].tRel;
+    const maxT = Math.max(eventRec.expectedDuration + 1.5, lastSampleT, 4.0);
+    const spanT = Math.max(1.0, maxT - minT);
+
+    // Auto-scale acceleration cleanly so both mild (0.11g) and major (0.78g) quakes show rich wave detail!
+    const maxScaleG = Math.max(0.16, eventRec.peakG * 1.18);
+
+    const tToX = (tRel) => ((tRel - minT) / spanT) * w;
+
+    // Shade pre-event baseline region (t < 0)
+    const xZero = tToX(0);
+    if (xZero > 0) {
+      ctx.fillStyle = 'rgba(56, 189, 248, 0.045)';
+      ctx.fillRect(0, padTop, xZero, plotH);
+      ctx.strokeStyle = 'rgba(56, 189, 248, 0.45)';
+      ctx.beginPath();
+      ctx.moveTo(xZero, padTop);
+      ctx.lineTo(xZero, padTop + plotH);
+      ctx.stroke();
+    }
+
+    // Time ticks along bottom axis
+    ctx.fillStyle = '#64748b';
+    ctx.font = detailed ? '10.5px monospace' : '9px monospace';
+    const stepSec = spanT > 18 ? 5 : 2;
+    for (let s = 0; s <= Math.floor(maxT); s += stepSec) {
+      const tx = tToX(s);
+      ctx.fillText(`${s}s`, Math.min(w - 22, Math.max(2, tx - 6)), h - 4);
+    }
+
+    // Trigger vertical marker (t0 Snapshot)
+    if (eventRec.triggerRelTime !== null) {
+      const trigX = tToX(eventRec.triggerRelTime);
+      ctx.strokeStyle = 'rgba(251, 191, 36, 0.75)';
+      ctx.lineWidth = 1.3;
+      ctx.beginPath();
+      ctx.moveTo(trigX, padTop);
+      ctx.lineTo(trigX, padTop + plotH);
+      ctx.stroke();
+      if (detailed) {
+        ctx.fillStyle = '#fbbf24';
+        ctx.font = 'bold 10.5px monospace';
+        ctx.fillText(`⚡ Disparo t₀ (${eventRec.triggerRelTime.toFixed(1)}s)`, trigX + 4, padTop + 12);
+      }
+    }
+
+    // Collapse marker (major quake)
+    if (detailed && eventRec.collapseRelTime !== null) {
+      const colX = tToX(eventRec.collapseRelTime);
+      ctx.strokeStyle = 'rgba(248, 113, 113, 0.75)';
+      ctx.beginPath();
+      ctx.moveTo(colX, padTop);
+      ctx.lineTo(colX, padTop + plotH);
+      ctx.stroke();
+      ctx.fillStyle = '#fca5a5';
+      ctx.font = '10px monospace';
+      ctx.fillText('💥 Caída/Colapso', colX + 4, padTop + 26);
+    }
+
+    // Filled acceleration envelope + crisp stroke (Cyan)
+    ctx.fillStyle = 'rgba(56, 189, 248, 0.16)';
+    ctx.beginPath();
+    samples.forEach((pt, idx) => {
+      const x = tToX(pt.tRel);
+      const normA = Math.min(1, pt.accelG / maxScaleG);
+      const y = padTop + plotH * (1 - normA);
+      if (idx === 0) ctx.moveTo(x, padTop + plotH);
+      ctx.lineTo(x, y);
+    });
+    ctx.lineTo(tToX(lastSampleT), padTop + plotH);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.strokeStyle = '#38bdf8';
+    ctx.lineWidth = detailed ? 1.8 : 1.35;
+    ctx.beginPath();
+    samples.forEach((pt, idx) => {
+      const x = tToX(pt.tRel);
+      const normA = Math.min(1, pt.accelG / maxScaleG);
+      const y = padTop + plotH * (1 - normA);
+      if (idx === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+
+    // STA/LTA ratio curve (Amber)
+    ctx.strokeStyle = '#fbbf24';
+    ctx.lineWidth = detailed ? 2.1 : 1.5;
+    ctx.beginPath();
+    samples.forEach((pt, idx) => {
+      const x = tToX(pt.tRel);
+      const normR = Math.min(1, pt.ratio / maxRatioScale);
+      const y = padTop + plotH * (1 - normR);
+      if (idx === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+
+    // Peak PGA dot & header summary
+    const peakX = tToX(eventRec.peakRelTime);
+    const peakY = padTop + plotH * (1 - Math.min(1, eventRec.peakG / maxScaleG));
     ctx.fillStyle = '#f87171';
+    ctx.beginPath();
+    ctx.arc(peakX, peakY, detailed ? 4 : 3, 0, Math.PI * 2);
+    ctx.fill();
+
+    if (detailed) {
+      ctx.fillStyle = '#e2e8f0';
+      ctx.font = 'bold 11.5px monospace';
+      const stateStr = eventRec.active ? '● GRABANDO EN VIVO' : '✓ REGISTRO COMPLETO GUARDADO';
+      ctx.fillText(
+        `${eventRec.label} · PGA máx: ${eventRec.peakG.toFixed(3)}g · STA/LTA máx: ${eventRec.peakStaLta.toFixed(2)} · ${stateStr}`,
+        8,
+        15
+      );
+
+      // Interactive cursor hover inspection
+      if (seismoHoverNormX !== null) {
+        const hoverT = minT + seismoHoverNormX * spanT;
+        let nearest = samples[0];
+        let bestDiff = Infinity;
+        for (const s of samples) {
+          const d = Math.abs(s.tRel - hoverT);
+          if (d < bestDiff) {
+            bestDiff = d;
+            nearest = s;
+          }
+        }
+        const hx = tToX(nearest.tRel);
+        ctx.strokeStyle = 'rgba(248, 250, 252, 0.65)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(hx, padTop);
+        ctx.lineTo(hx, padTop + plotH);
+        ctx.stroke();
+
+        if (elSeismoHoverReadout) {
+          elSeismoHoverReadout.innerHTML =
+            `Cursor en <strong>t = ${nearest.tRel >= 0 ? '+' : ''}${nearest.tRel.toFixed(2)} s</strong> · Aceleración MPU6050: <strong style="color:#38bdf8">${nearest.accelG.toFixed(3)} g</strong> · STA/LTA: <strong style="color:#fbbf24">${nearest.ratio.toFixed(2)}</strong> ${nearest.triggered ? '<span style="color:#f87171">(≥ 3.0 DISPARADO)</span>' : ''}`;
+        }
+      }
+    }
+
+    if (elHudSeismoTag) {
+      elHudSeismoTag.textContent = eventRec.active
+        ? `Grabando (${lastSampleT.toFixed(1)}s)`
+        : `${eventRec.label} (${eventRec.peakG.toFixed(2)}g)`;
+    }
+    return;
+  }
+
+  // LIVE ROLLING STREAM MODE
+  if (elHudSeismoTag) {
+    elHudSeismoTag.textContent = eventRec ? 'En vivo (hay evento guardado)' : 'Tiempo real';
+  }
+  if (detailed) {
+    ctx.fillStyle = '#94a3b8';
     ctx.font = '11px monospace';
-    ctx.fillText('Umbral Disparo STA/LTA = 3.0', 8, threshY - 5);
+    ctx.fillText('Señal MPU6050 en Tiempo Real (Ventana deslizante) — Umbral STA/LTA = 3.0', 8, 15);
   }
 
   const hist = sim.seismoHistory;
@@ -463,19 +799,19 @@ function drawSeismogram(ctx, w, h, detailed = false) {
   hist.forEach((pt, idx) => {
     const x = (idx / (hist.length - 1)) * w;
     const normA = Math.min(1, pt.accelG / 0.75);
-    const y = h - 5 - normA * (h - 12);
+    const y = padTop + plotH * (1 - normA);
     if (idx === 0) ctx.moveTo(x, y);
     else ctx.lineTo(x, y);
   });
   ctx.stroke();
 
   ctx.strokeStyle = '#fbbf24';
-  ctx.lineWidth = detailed ? 2.2 : 1.6;
+  ctx.lineWidth = detailed ? 2.1 : 1.6;
   ctx.beginPath();
   hist.forEach((pt, idx) => {
     const x = (idx / (hist.length - 1)) * w;
-    const normR = Math.min(1, pt.ratio / 10.0);
-    const y = h - 5 - normR * (h - 12);
+    const normR = Math.min(1, pt.ratio / maxRatioScale);
+    const y = padTop + plotH * (1 - normR);
     if (idx === 0) ctx.moveTo(x, y);
     else ctx.lineTo(x, y);
   });
@@ -487,7 +823,16 @@ function updateHudTelemetry() {
   elLedBlink?.classList.toggle('blink-on', sim.gatewayLeds.blink);
   elLedYellow?.classList.toggle('yellow-on', sim.gatewayLeds.yellow);
   elNavDot?.classList.toggle('has-data', sim.gatewayLeds.yellow);
-  elBtnExtract?.classList.toggle('glow-ready', sim.gatewayLeds.yellow && !sim.dataExtractedByOperator);
+
+  const readyToExtract = sim.gatewayLeds.yellow && sim.canExtractGateway() && !sim.dataExtractedByOperator;
+  elBtnExtract?.classList.toggle('glow-ready', readyToExtract);
+
+  // Highlight Pole Lower button when Gateway has data (Yellow LED) and is still up on the pole!
+  if (sim.gatewayLeds.yellow && sim.gatewayPoleState === 'up' && !sim.dataExtractedByOperator) {
+    elBtnLowerPole?.classList.add('btn-pulse-attention');
+  }
+
+  syncPoleUI();
 
   const s1 = document.getElementById('mstep-1');
   const s2 = document.getElementById('mstep-2');
@@ -496,28 +841,28 @@ function updateHudTelemetry() {
 
   const hasEventStarted = sim.quakeActive || Boolean(sim.frozenSnapshot);
   const hasSnapshot = Boolean(sim.frozenSnapshot);
-  const hasExtracted = sim.dataExtractedByOperator && hasSnapshot;
+  const hasLoweredAndExtracted = sim.canExtractGateway() && sim.dataExtractedByOperator && hasSnapshot;
   const hasReported = sim.reportSubmitted;
 
   if (s1) s1.className = `mission-step ${hasEventStarted ? 'done' : 'current'}`;
   if (s2) s2.className = `mission-step ${hasSnapshot ? 'done' : hasEventStarted ? 'current' : ''}`;
-  if (s3) s3.className = `mission-step ${hasExtracted ? 'done' : hasSnapshot ? 'current' : ''}`;
-  if (s4) s4.className = `mission-step ${hasReported ? 'done' : hasExtracted ? 'current' : ''}`;
+  if (s3) s3.className = `mission-step ${hasLoweredAndExtracted ? 'done' : hasSnapshot ? 'current' : ''}`;
+  if (s4) s4.className = `mission-step ${hasReported ? 'done' : hasLoweredAndExtracted ? 'current' : ''}`;
 
   if (elOledSta) elOledSta.textContent = `STA/LTA: ${sim.staLtaRatio.toFixed(2)}`;
   if (elOledBox && elOledTitle && elOledSub) {
     if (sim.scenario === 'major' && hasEventStarted) {
       elOledBox.className = 'sniffer-oled state-major';
       elOledTitle.textContent = 'ALERTA SÍSMICA';
-      elOledSub.textContent = 'Enviando datos t₀ al Gateway';
+      elOledSub.textContent = 'RPi5 enviando t₀ → Poste Exterior';
     } else if (sim.scenario === 'mild' && hasEventStarted) {
       elOledBox.className = 'sniffer-oled state-mild';
       elOledTitle.textContent = 'SISMO LEVE';
-      elOledSub.textContent = 'Enviando datos preventivos';
+      elOledSub.textContent = 'Enviando datos preventivos → Poste';
     } else {
       elOledBox.className = 'sniffer-oled state-normal';
       elOledTitle.textContent = 'MONITOREO';
-      elOledSub.textContent = `Ventana 10s: ${sim.rollingProbes.length} tramas`;
+      elOledSub.textContent = `4 Pisos · Ventana 10s: ${sim.rollingProbes.length} tramas`;
     }
   }
 
@@ -533,7 +878,7 @@ function updateHudTelemetry() {
   }
 }
 
-// ================= 9. CONSOLA DE EXTRACCIÓN GATEWAY RPi5 =================
+// ================= 9. CONSOLA DE EXTRACCIÓN DEL GATEWAY Y MAPA DE 4 PISOS =================
 document.querySelectorAll('.subtab-btn').forEach((btn) => {
   btn.addEventListener('click', () => {
     document.querySelectorAll('.subtab-btn').forEach((b) => b.classList.remove('active'));
@@ -546,23 +891,36 @@ document.querySelectorAll('.subtab-btn').forEach((btn) => {
 
 chkMacFilter?.addEventListener('change', refreshConsoleData);
 
-function worldToMap(wx, wz) {
-  const x = ((wx + 12) / 24) * rssiCanvas.width;
-  const y = ((wz + 9.5) / 21.5) * rssiCanvas.height;
-  return { x, y };
+// 4-Story Cross-Section Elevation Coordinate Helpers
+function getFloorBandRect(floorNum, w, h) {
+  // floorNum: 4 (top) .. 1 (bottom)
+  const topMargin = 42;
+  const bottomGround = h - 46;
+  const totalBldgH = bottomGround - topMargin;
+  const bandH = totalBldgH / 4;
+  const idxFromTop = 4 - floorNum;
+  return {
+    x: 56,
+    y: topMargin + idxFromTop * bandH,
+    w: w - 235,
+    h: bandH - 6
+  };
 }
 
-function mapToWorld(cx, cy) {
-  const wx = (cx / rssiCanvas.width) * 24 - 12;
-  const wz = (cy / rssiCanvas.height) * 21.5 - 9.5;
-  return { x: wx, z: wz };
+function worldToElevationMap(wx, floorNum, w, h) {
+  const rect = getFloorBandRect(floorNum, w, h);
+  const normX = Math.max(0.04, Math.min(0.96, (wx - -8.5) / (5.5 - -8.5)));
+  return {
+    x: rect.x + normX * rect.w,
+    y: rect.y + rect.h * 0.56
+  };
 }
 
 rssiCanvas?.addEventListener('click', (e) => {
   const rect = rssiCanvas.getBoundingClientRect();
   const cx = ((e.clientX - rect.left) / rect.width) * rssiCanvas.width;
   const cy = ((e.clientY - rect.top) / rect.height) * rssiCanvas.height;
-  sim.userMapPins.push(mapToWorld(cx, cy));
+  sim.userMapPins.push({ cx, cy });
   refreshConsoleData();
 });
 
@@ -578,255 +936,294 @@ function drawTacticalRssiMap(packets) {
   rssiCtx.fillStyle = '#060c16';
   rssiCtx.fillRect(0, 0, w, h);
 
-  rssiCtx.strokeStyle = 'rgba(56, 189, 248, 0.07)';
+  // Subtle blueprint grid
+  rssiCtx.strokeStyle = 'rgba(56, 189, 248, 0.06)';
   rssiCtx.lineWidth = 1;
-  for (let gx = 0; gx < w; gx += 38) {
+  for (let gx = 0; gx < w; gx += 36) {
     rssiCtx.beginPath();
     rssiCtx.moveTo(gx, 0);
     rssiCtx.lineTo(gx, h);
     rssiCtx.stroke();
   }
-  for (let gy = 0; gy < h; gy += 38) {
+  for (let gy = 0; gy < h; gy += 36) {
     rssiCtx.beginPath();
     rssiCtx.moveTo(0, gy);
     rssiCtx.lineTo(w, gy);
     rssiCtx.stroke();
   }
 
-  ZONES.forEach((zone) => {
-    const tl = worldToMap(zone.bounds.xMin, zone.bounds.zMin);
-    const br = worldToMap(zone.bounds.xMax, zone.bounds.zMax);
-    const zw = br.x - tl.x;
-    const zh = br.y - tl.y;
+  rssiCtx.fillStyle = '#94a3b8';
+  rssiCtx.font = 'bold 12px monospace';
+  rssiCtx.fillText('CORTE ARQUITECTÓNICO DE 4 PISOS — TRIANGULACIÓN PRE-SISMO (t₀)', 56, 24);
 
+  // Ground street line
+  const groundY = h - 42;
+  rssiCtx.strokeStyle = '#334155';
+  rssiCtx.lineWidth = 2;
+  rssiCtx.beginPath();
+  rssiCtx.moveTo(20, groundY);
+  rssiCtx.lineTo(w - 20, groundY);
+  rssiCtx.stroke();
+
+  // Draw the 4 Floor Slabs (Piso 4 down to Piso 1)
+  ZONES.forEach((zone) => {
+    const r = getFloorBandRect(zone.floor, w, h);
     const isCollapsed = sim.collapsedZones.has(zone.id);
-    rssiCtx.fillStyle = isCollapsed ? 'rgba(239, 68, 68, 0.14)' : 'rgba(19, 32, 54, 0.72)';
-    rssiCtx.fillRect(tl.x, tl.y, zw, zh);
+
+    rssiCtx.fillStyle = isCollapsed ? 'rgba(239, 68, 68, 0.15)' : 'rgba(17, 29, 48, 0.78)';
+    rssiCtx.fillRect(r.x, r.y, r.w, r.h);
 
     rssiCtx.strokeStyle = zone.color;
     rssiCtx.lineWidth = 2;
-    rssiCtx.strokeRect(tl.x, tl.y, zw, zh);
+    rssiCtx.strokeRect(r.x, r.y, r.w, r.h);
 
     rssiCtx.fillStyle = zone.color;
-    rssiCtx.font = 'bold 13px monospace';
-    rssiCtx.fillText(`${zone.shortName}${isCollapsed ? ' [COLAPSO PARCIAL]' : ''}`, tl.x + 8, tl.y + 18);
+    rssiCtx.font = 'bold 12.5px monospace';
+    rssiCtx.fillText(
+      `${zone.name}${isCollapsed ? '  [⚠ CAÍDA / BLOQUEO PARCIAL]' : ''}`,
+      r.x + 10,
+      r.y + 18
+    );
+
+    // Sniffer RPi5 icon on Piso 2
+    if (zone.floor === 2) {
+      const sx = r.x + r.w * 0.54;
+      const sy = r.y + r.h * 0.56;
+      rssiCtx.fillStyle = '#38bdf8';
+      rssiCtx.fillRect(sx - 8, sy - 8, 16, 16);
+      rssiCtx.fillStyle = '#e0f2fe';
+      rssiCtx.font = '10.5px monospace';
+      rssiCtx.fillText('SNIFFER RPi5+MPU6050', sx + 12, sy + 4);
+    }
   });
 
-  const snPos = worldToMap(0, -1.85);
-  rssiCtx.fillStyle = '#38bdf8';
-  rssiCtx.beginPath();
-  rssiCtx.arc(snPos.x, snPos.y, 7, 0, Math.PI * 2);
-  rssiCtx.fill();
-  rssiCtx.font = 'bold 11px monospace';
-  rssiCtx.fillText('SNIFFER', snPos.x - 24, snPos.y - 11);
+  // Right-side Emergency Stairwell column
+  const topR = getFloorBandRect(4, w, h);
+  const botR = getFloorBandRect(1, w, h);
+  const stairX = topR.x + topR.w + 6;
+  const stairH = botR.y + botR.h - topR.y;
+  rssiCtx.fillStyle = 'rgba(30, 41, 59, 0.65)';
+  rssiCtx.strokeStyle = '#fbbf24';
+  rssiCtx.lineWidth = 1.5;
+  rssiCtx.fillRect(stairX, topR.y, 52, stairH);
+  rssiCtx.strokeRect(stairX, topR.y, 52, stairH);
+  rssiCtx.fillStyle = '#fcd34d';
+  rssiCtx.font = '10px monospace';
+  rssiCtx.fillText('ESCALERA', stairX + 3, topR.y + 15);
 
-  const ap = worldToMap(ASSEMBLY_POINT.x, ASSEMBLY_POINT.z);
-  rssiCtx.strokeStyle = '#10b981';
-  rssiCtx.lineWidth = 2;
+  // Outdoor Street Light Pole + Gateway on far right
+  const poleX = w - 68;
+  rssiCtx.strokeStyle = '#94a3b8';
+  rssiCtx.lineWidth = 4;
   rssiCtx.beginPath();
-  rssiCtx.arc(ap.x, ap.y, 38, 0, Math.PI * 2);
+  rssiCtx.moveTo(poleX, groundY);
+  rssiCtx.lineTo(poleX, groundY - 190);
+  rssiCtx.lineTo(poleX - 24, groundY - 202);
   rssiCtx.stroke();
-  rssiCtx.fillStyle = '#6ee7b7';
-  rssiCtx.fillText('PUNTO DE ENCUENTRO', ap.x - 62, ap.y + 52);
 
-  const gw = worldToMap(GATEWAY_WORLD_POS.x, GATEWAY_WORLD_POS.z);
-  rssiCtx.fillStyle = '#fbbf24';
-  rssiCtx.fillRect(gw.x - 10, gw.y - 8, 20, 16);
-  rssiCtx.fillText('GATEWAY RPi5', gw.x - 42, gw.y + 24);
+  const gwNorm = (sim.gatewayHeight - 1.18) / (4.65 - 1.18);
+  const gwY = groundY - 38 - gwNorm * 125;
+  rssiCtx.fillStyle = sim.gatewayLeds.yellow ? '#fbbf24' : '#3b82f6';
+  rssiCtx.fillRect(poleX - 18, gwY - 10, 16, 20);
+  rssiCtx.fillStyle = '#f8fafc';
+  rssiCtx.font = '10px monospace';
+  rssiCtx.fillText('POSTE LUZ', poleX - 28, groundY + 15);
+  rssiCtx.fillText(`GW ${sim.gatewayHeight.toFixed(1)}m`, poleX - 28, groundY + 28);
 
+  // Plot detected smartphones per floor in t0
   packets.forEach((pkt) => {
-    const pt = worldToMap(pkt.estX, pkt.estZ);
-    const personNow = sim.people.find((p) => p.id === pkt.personId);
-    const lost = personNow && (personNow.state === 'trapped' || !personNow.phoneOnline);
-    const evac = personNow && personNow.state === 'evacuated';
+    const floorNum = pkt.estimatedFloor || ZONES.find((z) => z.id === pkt.estimatedZone)?.floor || 1;
+    const jitY = ((pkt.personId % 5) - 2) * 6;
+    const pt = worldToElevationMap(pkt.estX, floorNum, w, h);
+    const py = pt.y + jitY;
 
-    rssiCtx.fillStyle = pkt.isDuplicateRandomBurst
-      ? 'rgba(245, 158, 11, 0.12)'
-      : 'rgba(56, 189, 248, 0.16)';
+    const livePerson = sim.people.find((p) => p.id === pkt.personId);
+    const isTrappedOrOffline = livePerson && (!livePerson.phoneOnline || livePerson.state === 'trapped');
+    const isEvacuated = livePerson && livePerson.state === 'evacuated';
+
+    rssiCtx.fillStyle = 'rgba(56, 189, 248, 0.2)';
     rssiCtx.beginPath();
-    rssiCtx.arc(pt.x, pt.y, 14, 0, Math.PI * 2);
+    rssiCtx.arc(pt.x, py, 12, 0, Math.PI * 2);
     rssiCtx.fill();
 
-    rssiCtx.fillStyle = pkt.isDuplicateRandomBurst
-      ? '#fbbf24'
-      : lost
-        ? '#ef4444'
-        : evac
-          ? '#10b981'
-          : '#38bdf8';
+    rssiCtx.fillStyle = '#38bdf8';
     rssiCtx.beginPath();
-    rssiCtx.arc(pt.x, pt.y, 5, 0, Math.PI * 2);
+    rssiCtx.arc(pt.x, py, 5, 0, Math.PI * 2);
     rssiCtx.fill();
+
+    if (sim.frozenSnapshot) {
+      rssiCtx.strokeStyle = isTrappedOrOffline ? '#ef4444' : isEvacuated ? '#10b981' : '#fbbf24';
+      rssiCtx.lineWidth = 2;
+      rssiCtx.beginPath();
+      rssiCtx.arc(pt.x, py, 8.5, 0, Math.PI * 2);
+      rssiCtx.stroke();
+    }
+
+    rssiCtx.fillStyle = '#e2e8f0';
+    rssiCtx.font = '10px monospace';
+    rssiCtx.fillText(pkt.deviceHash.slice(0, 6), pt.x + 9, py + 3);
   });
 
+  // Draw USAR Rescue Pins placed by Operator
   sim.userMapPins.forEach((pin, idx) => {
-    const pt = worldToMap(pin.x, pin.z);
     rssiCtx.strokeStyle = '#fbbf24';
     rssiCtx.lineWidth = 2;
     rssiCtx.beginPath();
-    rssiCtx.arc(pt.x, pt.y, 10, 0, Math.PI * 2);
+    rssiCtx.arc(pin.cx, pin.cy, 10, 0, Math.PI * 2);
     rssiCtx.stroke();
-    rssiCtx.fillStyle = '#fef08a';
-    rssiCtx.font = 'bold 11px monospace';
-    rssiCtx.fillText(`R${idx + 1}`, pt.x + 12, pt.y + 4);
+    rssiCtx.fillStyle = '#fbbf24';
+    rssiCtx.font = 'bold 11px sans-serif';
+    rssiCtx.fillText(`USAR-${idx + 1}`, pin.cx + 12, pin.cy + 4);
   });
 }
 
 function refreshConsoleData() {
+  if (!sim) return;
+  syncPoleUI();
   const snap = sim.frozenSnapshot;
+  const applyFilter = chkMacFilter ? chkMacFilter.checked : true;
+
   const banner = document.getElementById('console-snapshot-banner');
   const bannerText = document.getElementById('console-banner-text');
 
-  if (banner && bannerText) {
-    if (snap) {
-      banner.className = 'snapshot-status-banner has-event';
-      bannerText.innerHTML =
-        `<strong>🟡 LED Amarillo Activo — Snapshot Pre-Sismo <code>t₀ = ${snap.triggerTime.toFixed(1)}s</code> (${snap.magnitude.toFixed(1)} Mw):</strong> ` +
-        `Datos congelados por el Sniffer al cruzar <code>STA/LTA = ${snap.triggerStaLta.toFixed(2)}</code> justo antes de la evacuación/colapso.`;
-    } else {
-      banner.className = 'snapshot-status-banner no-event';
-      bannerText.innerHTML =
-        `<strong>🔵 LED Azul Activo (Sin evento sísmico aún):</strong> Mostrando buffer circular en vivo (últimos 10s). ` +
-        `Usa los botones de la derecha para disparar un sismo y capturar el estado <code>t₀</code>.`;
-    }
+  if (snap && banner && bannerText) {
+    banner.classList.remove('no-event');
+    bannerText.innerHTML =
+      `<strong>🟡 LED Amarillo Activo — Snapshot Pre-Sismo (<code>t₀ = ${snap.triggerTime.toFixed(1)}s</code>) recibido desde Sniffer RPi5:</strong> ` +
+      `Magnitud <strong>${snap.magnitude.toFixed(1)} Mw</strong> · Disparo <code>STA/LTA = ${snap.triggerStaLta.toFixed(2)}</code> · ` +
+      `Estado en Poste: <strong>${sim.canExtractGateway() ? 'Abajo (1.18 m — Conectado USB-C)' : 'Arriba en Poste (4.65 m — Bájalo para validar extracción)'}</strong>.`;
+  } else if (banner && bannerText) {
+    banner.classList.add('no-event');
+    bannerText.innerHTML =
+      `<strong>🔵 LED Azul Activo (Sin evento sísmico registrado):</strong> Mostrando buffer circular de los últimos 10 s enviado por la Raspberry Pi 5 (Piso 2). Dispara un <em>Sismo Pequeño</em> o un <em>Terremoto Fuerte</em> para congelar la captura <code>t₀</code>.`;
   }
 
-  const rawPackets = snap ? snap.rawPackets : sim.rollingProbes;
-  const filterEnabled = chkMacFilter ? chkMacFilter.checked : true;
+  let rawList = [];
+  if (snap) {
+    rawList = snap.rawPackets;
+  } else {
+    rawList = sim.rollingProbes.filter((p) => sim.time - p.timestamp <= 10.0);
+  }
 
-  let displayedRows = [];
-  if (filterEnabled) {
+  const randomDuplicateCount = rawList.filter((p) => p.isDuplicateRandomBurst).length;
+
+  let displayPackets = [];
+  if (applyFilter) {
     const map = new Map();
-    rawPackets.forEach((pkt) => {
+    rawList.forEach((pkt) => {
       if (!pkt.isDuplicateRandomBurst) {
         map.set(pkt.deviceHash, pkt);
       }
     });
-    displayedRows = Array.from(map.values());
+    displayPackets = Array.from(map.values());
   } else {
-    displayedRows = [...rawPackets];
+    displayPackets = rawList.slice().reverse();
   }
-
-  const randDiscarded = rawPackets.filter((p) => p.isDuplicateRandomBurst).length;
-  const uniqueCount = new Set(rawPackets.filter((p) => !p.isDuplicateRandomBurst).map((p) => p.deviceHash)).size;
 
   const elRaw = document.getElementById('kpi-raw');
   const elRand = document.getElementById('kpi-rand');
-  const elUniq = document.getElementById('kpi-unique');
+  const elUnique = document.getElementById('kpi-unique');
   const elSta = document.getElementById('kpi-stalta');
 
-  if (elRaw) elRaw.textContent = String(rawPackets.length);
-  if (elRand) elRand.textContent = String(randDiscarded);
-  if (elUniq) {
-    elUniq.textContent = filterEnabled
-      ? String(displayedRows.length)
-      : `${rawPackets.length} (¡Sin filtrar!)`;
+  if (elRaw) elRaw.textContent = String(rawList.length);
+  if (elRand) elRand.textContent = String(randomDuplicateCount);
+  if (elUnique) elUnique.textContent = String(displayPackets.length);
+  if (elSta) elSta.textContent = snap ? snap.triggerStaLta.toFixed(2) : sim.staLtaRatio.toFixed(2);
+
+  const zCounts = { A: 0, B: 0, C: 0, D: 0 };
+  displayPackets.forEach((pkt) => {
+    if (zCounts[pkt.estimatedZone] !== undefined) zCounts[pkt.estimatedZone]++;
+  });
+  const summaryEl = document.getElementById('zone-rssi-summary');
+  if (summaryEl) {
+    summaryEl.innerHTML =
+      `<span><strong>Triangulación por Piso (${applyFilter ? 'Filtrada' : 'Sin filtrar'}):</strong></span>` +
+      `<span style="color:#10b981">Piso 1 (Cafetería): <strong>${zCounts.A}</strong></span>` +
+      `<span style="color:#38bdf8">Piso 2 (Lab/RPi5): <strong>${zCounts.B}</strong></span>` +
+      `<span style="color:#a855f7">Piso 3 (Servidores): <strong>${zCounts.C}</strong></span>` +
+      `<span style="color:#f59e0b">Piso 4 (Auditorio): <strong>${zCounts.D}</strong></span>`;
   }
-  if (elSta) elSta.textContent = (snap ? snap.triggerStaLta : sim.staLtaRatio).toFixed(2);
 
   const tbody = document.getElementById('probe-tbody');
   if (tbody) {
     tbody.innerHTML = '';
-    displayedRows.sort((a, b) => a.estimatedZone.localeCompare(b.estimatedZone));
-
-    displayedRows.forEach((pkt) => {
-      const personNow = sim.people.find((p) => p.id === pkt.personId);
-      let postBadge = '<span class="tag tag-ok">Activa en sala</span>';
-      if (personNow) {
-        if (personNow.state === 'evacuated') {
-          postBadge = '<span class="tag tag-ok">✓ Punto Encuentro</span>';
-        } else if (personNow.state === 'trapped' || !personNow.phoneOnline) {
-          postBadge = '<span class="tag tag-lost">✕ Señal perdida / Atrapado</span>';
-        } else if (personNow.state.startsWith('evacuating')) {
-          postBadge = '<span class="tag tag-rand">→ Evacuando</span>';
-        }
-      }
-
-      const r = pkt.rssiByZone;
+    displayPackets.forEach((pkt) => {
       const tr = document.createElement('tr');
-      if (pkt.isDuplicateRandomBurst) tr.className = 'random-mac';
+      const liveP = sim.people.find((p) => p.id === pkt.personId);
+      const postStatus = !snap
+        ? '<span class="tag tag-real">En monitoreo</span>'
+        : liveP?.state === 'evacuated'
+          ? '<span class="tag tag-real">Evacuado (Exterior)</span>'
+          : !liveP?.phoneOnline || liveP?.state === 'trapped'
+            ? '<span class="tag tag-lost">Señal perdida / Atrapado</span>'
+            : '<span class="tag tag-rand">Evacuando escalera</span>';
+
+      const zoneInfo = ZONES.find((z) => z.id === pkt.estimatedZone);
+      const rssiStr = `${pkt.rssiByZone.A} / ${pkt.rssiByZone.B} / ${pkt.rssiByZone.C} / ${pkt.rssiByZone.D} dBm`;
 
       tr.innerHTML = `
-        <td><strong>${pkt.isDuplicateRandomBurst ? 'LAA-BURST' : pkt.deviceHash}</strong></td>
+        <td><strong>${pkt.deviceHash}</strong></td>
         <td>${pkt.mac}</td>
         <td>
-          ${pkt.proto} · Ch ${pkt.channel}<br/>
-          <span class="tag ${pkt.isDuplicateRandomBurst ? 'tag-rand' : 'tag-ok'}">
-            ${pkt.isDuplicateRandomBurst ? 'Duplicado MAC Random' : pkt.vendor}
-          </span>
+          ${pkt.proto} (CH ${pkt.channel})
+          ${pkt.isDuplicateRandomBurst ? '<span class="tag tag-rand">Ráfaga LAA</span>' : pkt.isLaaRandom ? '<span class="tag tag-rand">MAC Privada</span>' : '<span class="tag tag-real">OUI Fijo</span>'}
         </td>
-        <td>A:${r.A} | B:${r.B} | C:${r.C} | D:${r.D} dBm</td>
-        <td><span class="tag tag-zone">Zona ${pkt.estimatedZone}</span> (${pkt.peakRssi} dBm)</td>
-        <td>${postBadge}</td>
+        <td>${rssiStr}</td>
+        <td style="color:${zoneInfo?.color || '#fff'}; font-weight:700;">${zoneInfo?.shortName || pkt.estimatedZone}</td>
+        <td>${postStatus}</td>
       `;
       tbody.appendChild(tr);
     });
   }
 
-  drawTacticalRssiMap(displayedRows);
-
-  const fullSeismo = document.getElementById('full-seismo-canvas');
-  if (fullSeismo) {
-    drawSeismogram(fullSeismo.getContext('2d'), fullSeismo.width, fullSeismo.height, true);
+  drawTacticalRssiMap(displayPackets);
+  if (fullSeismoCtx && fullSeismoCanvas) {
+    drawSeismogram(fullSeismoCtx, fullSeismoCanvas.width, fullSeismoCanvas.height, true);
   }
 
-  const zoneSummary = { A: 0, B: 0, C: 0, D: 0 };
-  const displayedZoneCounts = { A: 0, B: 0, C: 0, D: 0 };
-  const lostByZone = { A: 0, B: 0, C: 0, D: 0 };
-  displayedRows.forEach((d) => {
-    if (displayedZoneCounts[d.estimatedZone] !== undefined) {
-      displayedZoneCounts[d.estimatedZone]++;
-    }
-    if (!d.isDuplicateRandomBurst && zoneSummary[d.estimatedZone] !== undefined) {
-      zoneSummary[d.estimatedZone]++;
-      const pNow = sim.people.find((p) => p.id === d.personId);
-      if (pNow && (pNow.state === 'trapped' || !pNow.phoneOnline)) {
-        lostByZone[d.estimatedZone]++;
-      }
-    }
-  });
-
-  const summaryEl = document.getElementById('zone-rssi-summary');
-  if (summaryEl) {
-    summaryEl.innerHTML = `
-      <span><strong>Triangulación Pre-Sismo (${filterEnabled ? 'Filtrada 10s' : '¡Bruta sin filtrar!'}):</strong></span>
-      <span style="color:#38bdf8;">Zona A (Lab): <strong>${displayedZoneCounts.A}</strong>${lostByZone.A ? ` <em style="color:#f87171;">(${lostByZone.A} sin señal)</em>` : ''}</span>
-      <span style="color:#c084fc;">Zona B (Serv.): <strong>${displayedZoneCounts.B}</strong>${lostByZone.B ? ` <em style="color:#f87171;">(${lostByZone.B} sin señal)</em>` : ''}</span>
-      <span style="color:#fbbf24;">Zona C (Audit.): <strong>${displayedZoneCounts.C}</strong>${lostByZone.C ? ` <em style="color:#f87171;">(${lostByZone.C} sin señal)</em>` : ''}</span>
-      <span style="color:#34d399;">Zona D (Cafet.): <strong>${displayedZoneCounts.D}</strong>${lostByZone.D ? ` <em style="color:#f87171;">(${lostByZone.D} sin señal)</em>` : ''}</span>
-    `;
-  }
-
-  const mqttPayload = {
-    gateway_id: 'lpsbox-rpi5-bogota-01',
-    event_captured: Boolean(snap),
-    timestamp_t0_sec: snap ? Number(snap.triggerTime.toFixed(2)) : Number(sim.time.toFixed(2)),
-    seismic_mpu6050: {
-      sta_lta_ratio: Number((snap ? snap.triggerStaLta : sim.staLtaRatio).toFixed(3)),
-      threshold: sim.staLtaThreshold,
-      peak_accel_g: Number((snap ? snap.peakAccelG : sim.accel.dynamicG).toFixed(4))
-    },
-    sniffer_10s_window: {
-      raw_probe_requests: rawPackets.length,
-      mac_random_bursts_filtered: randDiscarded,
-      filtered_unique_phones: uniqueCount,
-      estimated_zones_t0: zoneSummary
-    },
-    leds: { ...sim.gatewayLeds }
-  };
   const mqttPre = document.getElementById('mqtt-json-preview');
-  if (mqttPre) mqttPre.textContent = JSON.stringify(mqttPayload, null, 2);
+  if (mqttPre) {
+    const eventRec = sim.getEventSeismogram();
+    const payloadExample = {
+      sniffer_node: 'LPSBOX-SNIFFER-RPI5-PISO2',
+      outdoor_gateway: {
+        id: 'LPSBOX-GW-POSTE-EXT-01',
+        pole_height_m: Number(sim.gatewayHeight.toFixed(2)),
+        pole_state: sim.gatewayPoleState,
+        leds: sim.gatewayLeds
+      },
+      timestamp_s: Number((snap ? snap.triggerTime : sim.time).toFixed(2)),
+      mpu6050_rpi5: {
+        accel_dynamic_g: Number((snap ? snap.peakAccelG : sim.accel.dynamicG).toFixed(4)),
+        sta_lta_ratio: Number((snap ? snap.triggerStaLta : sim.staLtaRatio).toFixed(2)),
+        threshold: sim.staLtaThreshold,
+        triggered: Boolean(snap),
+        recorded_waveform_samples: eventRec ? eventRec.samples.length : 0
+      },
+      crowd_sniffer_10s_window: {
+        raw_probe_requests: rawList.length,
+        filtered_randomized_macs: randomDuplicateCount,
+        unique_smartphones_t0: displayPackets.length,
+        floors_t0: {
+          piso_1_cafeteria: zCounts.A,
+          piso_2_lab_rpi5: zCounts.B,
+          piso_3_servidores: zCounts.C,
+          piso_4_auditorio: zCounts.D
+        }
+      }
+    };
+    mqttPre.textContent = JSON.stringify(payloadExample, null, 2);
+  }
 }
 
-// ================= 10. REPORTE DEL OPERARIO Y CALIFICACIÓN =================
-zoneInputs.forEach((inp) => {
-  inp?.addEventListener('input', () => {
-    const sum = zoneInputs.reduce((acc, el) => acc + Number(el?.value || 0), 0);
-    if (zoneSumHelper) {
-      zoneSumHelper.textContent = `Suma actual ingresada por zonas: ${sum} personas`;
-    }
-  });
-});
+// ================= 10. FORMULARIO Y EVALUACIÓN DEL OPERARIO =================
+function updateZoneSumHelper() {
+  const sum = zoneInputs.reduce((acc, inp) => acc + Number(inp?.value || 0), 0);
+  if (zoneSumHelper) {
+    zoneSumHelper.textContent = `Suma actual ingresada por pisos (P1+P2+P3+P4): ${sum} personas`;
+  }
+}
+zoneInputs.forEach((inp) => inp?.addEventListener('input', updateZoneSumHelper));
 
 document.getElementById('operator-report-form')?.addEventListener('submit', (e) => {
   e.preventDefault();
@@ -840,7 +1237,7 @@ document.getElementById('operator-report-form')?.addEventListener('submit', (e) 
     C: Number(document.getElementById('inp-zone-c')?.value || 0),
     D: Number(document.getElementById('inp-zone-d')?.value || 0)
   };
-  const priorityZoneGuess = document.getElementById('inp-priority-zone')?.value || 'A';
+  const priorityZoneGuess = document.getElementById('inp-priority-zone')?.value || 'D';
 
   const evalRes = sim.evaluateOperatorReport({ totalGuess, zoneGuesses, priorityZoneGuess });
 
@@ -850,28 +1247,29 @@ document.getElementById('operator-report-form')?.addEventListener('submit', (e) 
 
   if (scoreEl) {
     scoreEl.textContent = `${evalRes.score}/100`;
-    scoreEl.style.color = evalRes.score >= 85 ? '#34d399' : evalRes.score >= 60 ? '#fbbf24' : '#f87171';
+    scoreEl.style.color =
+      evalRes.score >= 85 ? '#34d399' : evalRes.score >= 60 ? '#fbbf24' : '#f87171';
   }
 
   const zRows = ['A', 'B', 'C', 'D']
     .map((z) => {
       const d = evalRes.zoneDetails[z];
       const mark = d.exact ? '✓' : '≠';
-      return `Zona ${z}: reportaste <strong>${d.guess}</strong> / real <strong>${d.truth}</strong> (${mark})`;
+      return `${d.code}: reportaste <strong>${d.guess}</strong> / real <strong>${d.truth}</strong> (${mark})`;
     })
     .join('<br/>');
 
   let extraNote = '';
   if (evalRes.usedUnfilteredRaw) {
     extraNote =
-      `<p style="color:#fcd34d; margin-top:6px;">⚠️ <strong>Nota de Ingeniería:</strong> Ingresaste el conteo bruto (${evalRes.rawPacketCount}) sin filtrar las MACs aleatorias en la ventana de 10 segundos. ¡Activa siempre el filtro anti-MAC-randomization!</p>`;
+      `<p style="color:#fcd34d; margin-top:6px;">⚠️ <strong>Nota de Ingeniería:</strong> Ingresaste el conteo bruto (${evalRes.rawPacketCount}) sin filtrar las MACs aleatorias en la ventana de 10 s.</p>`;
   }
 
   if (fbEl) {
     fbEl.innerHTML = `
-      <p><strong>Total antes del sismo (t₀):</strong> Reportaste <strong>${evalRes.totalGuess}</strong> personas · Realidad: <strong>${evalRes.truthTotal}</strong> personas.</p>
+      <p><strong>Total en el edificio antes del sismo (t₀):</strong> Reportaste <strong>${evalRes.totalGuess}</strong> personas · Realidad: <strong>${evalRes.truthTotal}</strong> personas.</p>
       <div style="margin: 6px 0; font-family: var(--font-mono); font-size: 11.5px;">${zRows}</div>
-      <p><strong>Prioridad USAR:</strong> Sector óptimo <strong>Zona ${evalRes.bestPriorityZone}</strong> ${evalRes.priorityCorrect ? '(¡Acertaste!)' : ''}.</p>
+      <p><strong>Prioridad USAR:</strong> Nivel prioritario <strong>${evalRes.bestPriorityZoneCode}</strong> ${evalRes.priorityCorrect ? '(¡Acertaste!)' : ''}.</p>
       ${extraNote}
     `;
   }
@@ -880,7 +1278,7 @@ document.getElementById('operator-report-form')?.addEventListener('submit', (e) 
   if (elBtnToggleHolo) elBtnToggleHolo.style.display = 'inline-flex';
   appendLogEntry({
     time: sim.time,
-    text: `Reporte de Operario evaluado: ${evalRes.score}/100 pts. Hologramas 3D pre-sismo (t₀) activados.`,
+    text: `Reporte de Operario calificado: ${evalRes.score}/100 pts. Hologramas 3D pre-sismo (t₀) activados en los 4 pisos.`,
     level: evalRes.score >= 80 ? 'ok' : 'warn'
   });
 });
@@ -917,24 +1315,20 @@ document.querySelectorAll('.gallery-item img').forEach((img) => {
 });
 lightbox?.addEventListener('click', () => lightbox.classList.remove('open'));
 
-// ================= 12. CONECTOR WEBSOCKET EN VIVO RASPBERRY PI 5 =================
-btnWs?.addEventListener('click', () => {
+// ================= 12. PUENTE EN VIVO WEBSOCKET CON SNIFFER RASPBERRY PI 5 =================
+wsBtn?.addEventListener('click', () => {
   const url = wsInput?.value.trim();
   if (!url) return;
-  if (wsClient) {
-    wsClient.close();
-    wsClient = null;
-  }
-  if (wsStatus) {
-    wsStatus.textContent = `Conectando a ${url}...`;
-    wsStatus.style.color = '#fbbf24';
-  }
-
   try {
+    if (wsClient) wsClient.close();
+    if (wsStatus) {
+      wsStatus.textContent = `Conectando a ${url}...`;
+      wsStatus.style.color = '#fbbf24';
+    }
     wsClient = new WebSocket(url);
     wsClient.onopen = () => {
       if (wsStatus) {
-        wsStatus.textContent = `✓ Conectado en vivo a Raspberry Pi 5 (${url})`;
+        wsStatus.textContent = `✓ Conectado en vivo a Sniffer RPi 5 (${url})`;
         wsStatus.style.color = '#34d399';
       }
       const badge = document.getElementById('gw-link-badge');
@@ -955,7 +1349,7 @@ btnWs?.addEventListener('click', () => {
     wsClient.onclose = () => {
       sim.externalHardwareConnected = false;
       const badge = document.getElementById('gw-link-badge');
-      if (badge) badge.textContent = 'RPi5 + ESP32';
+      if (badge) badge.textContent = 'ESP32 RX';
     };
   } catch (err) {
     if (wsStatus) {
@@ -986,9 +1380,9 @@ function stepFrame(now) {
 
   if (activeView === 'gallery') {
     cadInspector.render();
-  } else if (activeView === 'console' && !sim.frozenSnapshot) {
+  } else if (activeView === 'console') {
     consoleRefreshTimer += dt;
-    if (consoleRefreshTimer >= 1.2) {
+    if (consoleRefreshTimer >= (sim.quakeActive ? 0.25 : 1.0)) {
       consoleRefreshTimer = 0;
       refreshConsoleData();
     }
