@@ -27,7 +27,17 @@ export class StlCadInspector {
     this.camera = new THREE.PerspectiveCamera(42, w / h, 0.05, 30);
     this.camera.position.set(0.75, 0.72, 1.35);
 
-    this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    try {
+      this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    } catch (_) {
+      try {
+        this.renderer = new THREE.WebGLRenderer({ antialias: false, alpha: true });
+      } catch (err) {
+        console.warn('No se pudo inicializar el segundo contexto WebGL del visor CAD:', err);
+        this.renderer = null;
+        return;
+      }
+    }
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     this.renderer.setSize(w, h);
     this.container.appendChild(this.renderer.domElement);
@@ -88,13 +98,13 @@ export class StlCadInspector {
   }
 
   render() {
-    if (!this.initialized) return;
+    if (!this.initialized || !this.renderer) return;
     this.controls.update();
     this.renderer.render(this.scene, this.camera);
   }
 
   onResize() {
-    if (!this.initialized) return;
+    if (!this.initialized || !this.renderer) return;
     const w = this.container.clientWidth || 640;
     const h = this.container.clientHeight || 400;
     if (w === 0 || h === 0) return;

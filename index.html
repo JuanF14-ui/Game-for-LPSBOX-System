@@ -62,6 +62,47 @@
       <span id="stl-loading-text">Cargando malla 3D ./modelo3d.stl (50,000 triángulos)...</span>
     </div>
 
+    <!-- ================= START EXPERIENCE OVERLAY ================= -->
+    <div class="start-overlay" id="start-experience-overlay">
+      <div class="start-modal">
+        <div class="start-kicker" id="start-stl-status">
+          ● SISTEMA LPSBOX EN LÍNEA · ESCENA 3D ACTIVA
+        </div>
+        <h2>Simulador VR / MR — Operador LPSBOX</h2>
+        <p>
+          Asume el puesto de <strong>Operario de Emergencia Sísmica</strong>. Controla escenarios en tiempo real, observa cómo reaccionan las personas y los sensores <strong>ESP32 Sniffer + MPU6050</strong>, supervisa los <strong>3 LEDs físicos del Gateway (Raspberry Pi 5)</strong> y determina cuántas personas había y dónde se ubicaban con su celular antes del sismo (<code>t₀</code>).
+        </p>
+
+        <div class="start-features">
+          <div class="start-feat">
+            <strong>📡 1. Crowd Sniffer (10s)</strong>
+            Captura pasiva WiFi/BLE filtrando MACs aleatorias para ubicar personas por zona.
+          </div>
+          <div class="start-feat">
+            <strong>🌋 2. Sensor MPU6050</strong>
+            Algoritmo <code>STA/LTA</code> ante sismos leves, terremotos severos o golpes en la mesa.
+          </div>
+          <div class="start-feat">
+            <strong>💡 3. Gateway 3 LEDs</strong>
+            Caja sin pantalla: LED Azul (sin datos), Titileo (RX) y Amarillo (datos <code>t₀</code> listos).
+          </div>
+        </div>
+
+        <button class="btn-launch-main" id="btn-start-experience" type="button">
+          ▶ INICIAR EXPERIENCIA COMO OPERARIO
+        </button>
+
+        <div class="start-quick-row">
+          <button class="btn" id="btn-start-mild" type="button">
+            🟡 Iniciar con Sismo Tranqui (4.2 Mw)
+          </button>
+          <button class="btn btn-danger" id="btn-start-major" type="button">
+            🔴 Iniciar con Terremoto Severo (6.9 Mw)
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- ================= SIMULATOR HUD OVERLAY ================= -->
     <section class="hud-layer" id="sim-hud">
       <!-- LEFT HUD COLUMN: Mission Guide + Scenario Controls + Camera -->
