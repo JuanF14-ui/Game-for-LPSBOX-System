@@ -152,6 +152,7 @@ function drawSpeechBubbleCanvas(canvas, text, urgency = 'normal') {
     normal: { bg: 'rgba(15, 23, 42, 0.92)', border: '#38bdf8', text: '#f1f5f9' },
     mild: { bg: 'rgba(40, 29, 8, 0.95)', border: '#fbbf24', text: '#fef3c7' },
     major: { bg: 'rgba(69, 10, 10, 0.96)', border: '#f87171', text: '#fee2e2' },
+    catastrophic: { bg: 'rgba(59, 7, 100, 0.97)', border: '#c084fc', text: '#faf5ff' },
     trapped: { bg: 'rgba(88, 12, 24, 0.97)', border: '#fb7185', text: '#ffe4e6' },
     safe: { bg: 'rgba(6, 46, 34, 0.94)', border: '#34d399', text: '#d1fae5' }
   };
@@ -163,7 +164,7 @@ function drawSpeechBubbleCanvas(canvas, text, urgency = 'normal') {
   drawRoundRectPath(ctx, 8, 6, w - 16, boxH, 20);
   ctx.fill();
 
-  ctx.lineWidth = urgency === 'major' || urgency === 'trapped' ? 5 : 3.5;
+  ctx.lineWidth = urgency === 'major' || urgency === 'catastrophic' || urgency === 'trapped' ? 5 : 3.5;
   ctx.strokeStyle = style.border;
   drawRoundRectPath(ctx, 8, 6, w - 16, boxH, 20);
   ctx.stroke();
@@ -248,9 +249,32 @@ export class LPSBoxScene3D {
     this.controls.autoRotateSpeed = 0.55;
     this.introOrbitActive = true;
 
-    this.keys = { w: false, a: false, s: false, d: false };
-    this.fpYaw = -0.32;
-    this.fpPitch = 0.06;
+    this.keys = {
+      w: false,
+      a: false,
+      s: false,
+      d: false,
+      arrowup: false,
+      arrowdown: false,
+      arrowleft: false,
+      arrowright: false,
+      space: false,
+      shift: false,
+      c: false,
+      q: false
+    };
+    this.fpYaw = 0.24;
+    this.fpPitch = 0.05;
+    this.fpPos = new THREE.Vector3(2.8, 0.14, 11.8);
+    this.fpVelY = 0;
+    this.fpGrounded = true;
+    this.fpCrouching = false;
+    this.fpFlashlightOn = false;
+    this.staticColliders = [];
+    this.collapseColliders = [];
+    this.structuralPieces = [];
+    this._lastStructuralStage = 0;
+    this._sparkDamageTimer = 0;
     this.isPointerDragging = false;
 
     this.raycaster = new THREE.Raycaster();
@@ -297,6 +321,8 @@ export class LPSBoxScene3D {
     this._buildStairwellTower();
     this._buildRooftop();
     this._buildSnifferStation();
+    this._buildBreakableStructure();
+    this._buildStaticColliders();
     this._buildStreetLightPoleGateway();
     this._buildDynamicPropsAcrossFloors();
     this._buildParticlePools();
@@ -351,6 +377,14 @@ export class LPSBoxScene3D {
     const coolRim = new THREE.DirectionalLight(0x38bdf8, 0.45);
     coolRim.position.set(-18, 14, -14);
     this.scene.add(coolRim);
+
+    // Operator Tactical Flashlight (attached to camera, toggled with [L])
+    this.scene.add(this.camera);
+    this.operatorFlashlight = new THREE.SpotLight(0xfef9c3, 0.0, 24, Math.PI * 0.24, 0.42, 1.1);
+    this.operatorFlashlight.position.set(0.18, -0.12, 0);
+    this.operatorFlashlight.target.position.set(0, -0.08, -6);
+    this.camera.add(this.operatorFlashlight);
+    this.camera.add(this.operatorFlashlight.target);
   }
 
   _buildUrbanExterior() {
@@ -564,7 +598,7 @@ export class LPSBoxScene3D {
         handrail.position.set(-1.5, 1.12, 3.58);
         fg.add(handrail);
       } else {
-        // Piso 1 Main Entrance Portal frame at x = -1.2, z = 3.65
+        // Piso 1 Main Entrance Portal frame at x = -1.2, z = 3.62 + solid glass facade left/right of portal
         const portalMat = new THREE.MeshStandardMaterial({ color: 0x38bdf8, metalness: 0.5, roughness: 0.3 });
         const pLeft = new THREE.Mesh(new THREE.BoxGeometry(0.16, 2.5, 0.22), portalMat);
         pLeft.position.set(-2.4, 1.35, 3.62);
@@ -573,7 +607,34 @@ export class LPSBoxScene3D {
         const pTop = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.18, 0.35), portalMat);
         pTop.position.set(-1.2, 2.62, 3.62);
         fg.add(pLeft, pRight, pTop);
+
+        const gLeft = new THREE.Mesh(new THREE.BoxGeometry(6.1, 2.6, 0.06), glassMat);
+        gLeft.position.set(-5.5, 1.5, 3.58);
+        const gRight = new THREE.Mesh(new THREE.BoxGeometry(5.3, 2.6, 0.06), glassMat);
+        gRight.position.set(2.7, 1.5, 3.58);
+        const ramp = new THREE.Mesh(
+          new THREE.BoxGeometry(2.5, 0.1, 0.75),
+          new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.8 })
+        );
+        ramp.position.set(-1.2, 0.16, 3.95);
+        ramp.rotation.x = 0.11;
+        fg.add(gLeft, gRight, ramp);
       }
+
+      // Interior partition wall separating room from stairwell (with open doorway at z in [1.55..3.45])
+      const partWall = new THREE.Mesh(
+        new THREE.BoxGeometry(0.16, FLOOR_HEIGHT - 0.22, 5.85),
+        backWallMat
+      );
+      partWall.position.set(5.5, FLOOR_HEIGHT * 0.5 + 0.1, -1.38);
+      fg.add(partWall);
+
+      const stairDoorHeader = new THREE.Mesh(
+        new THREE.BoxGeometry(0.18, 0.52, 2.0),
+        new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.6 })
+      );
+      stairDoorHeader.position.set(5.5, FLOOR_HEIGHT - 0.28, 2.52);
+      fg.add(stairDoorHeader);
 
       // Floor Badge Sign on left column
       const floorSign = new THREE.Mesh(
@@ -681,9 +742,10 @@ export class LPSBoxScene3D {
   }
 
   _buildStairwellTower() {
-    // Glass emergency stairwell on right wing (x in [5.6..8.8], z in [-3.8..3.2], y in [0..12.8])
+    // Walkable 4-story + rooftop U-turn glass stairwell on right wing (x in [5.58..8.92], z in [-4.05..3.55])
     const frameMat = new THREE.MeshStandardMaterial({ color: 0x334155, metalness: 0.45, roughness: 0.5 });
-    const stepMat = new THREE.MeshStandardMaterial({ color: 0x475569, roughness: 0.7 });
+    const stepMat = new THREE.MeshStandardMaterial({ color: 0x475569, roughness: 0.72 });
+    const treadMat = new THREE.MeshStandardMaterial({ color: 0x64748b, roughness: 0.65 });
     const railMat = new THREE.MeshStandardMaterial({ color: 0xfbbf24, roughness: 0.4, metalness: 0.3 });
     const glassMat = new THREE.MeshPhysicalMaterial({
       color: 0x93c5fd,
@@ -693,80 +755,136 @@ export class LPSBoxScene3D {
       side: THREE.DoubleSide
     });
 
+    const totalTowerH = FLOOR_HEIGHT * 4 + 3.0;
+
     // Vertical corner steel mullions
-    [[5.6, -3.8], [8.8, -3.8], [5.6, 3.2], [8.8, 3.2]].forEach(([sx, sz]) => {
-      const post = new THREE.Mesh(new THREE.BoxGeometry(0.22, FLOOR_HEIGHT * 4 + 0.5, 0.22), frameMat);
-      post.position.set(sx, FLOOR_HEIGHT * 2 + 0.25, sz);
+    [[5.62, -4.05], [8.92, -4.05], [5.62, 3.52], [8.92, 3.52]].forEach(([sx, sz]) => {
+      const post = new THREE.Mesh(new THREE.BoxGeometry(0.22, totalTowerH, 0.22), frameMat);
+      post.position.set(sx, totalTowerH * 0.5, sz);
       this.stairwellGroup.add(post);
     });
 
-    // Outer glass enclosure panels (open at ground door z=3.2)
-    const sideGlass = new THREE.Mesh(new THREE.PlaneGeometry(7.0, FLOOR_HEIGHT * 4), glassMat);
-    sideGlass.rotation.y = Math.PI / 2;
-    sideGlass.position.set(8.8, FLOOR_HEIGHT * 2, -0.3);
-    this.stairwellGroup.add(sideGlass);
+    // East & North glass enclosure walls + South glass above ground doorway
+    const eastGlass = new THREE.Mesh(new THREE.PlaneGeometry(7.55, totalTowerH), glassMat);
+    eastGlass.rotation.y = Math.PI / 2;
+    eastGlass.position.set(8.92, totalTowerH * 0.5, -0.26);
+    this.stairwellGroup.add(eastGlass);
 
-    // Flights & landings between each floor
-    for (let f = 0; f < 4; f++) {
-      const y0 = f * FLOOR_HEIGHT;
+    const northGlass = new THREE.Mesh(new THREE.PlaneGeometry(3.3, totalTowerH), glassMat);
+    northGlass.position.set(7.27, totalTowerH * 0.5, -4.05);
+    this.stairwellGroup.add(northGlass);
 
-      // Floor landing connecting building to stairwell
-      const landing = new THREE.Mesh(new THREE.BoxGeometry(3.1, 0.16, 1.8), stepMat);
-      landing.position.set(7.2, y0 + 0.1, -2.8);
-      this.stairwellGroup.add(landing);
+    const southUpperGlass = new THREE.Mesh(new THREE.PlaneGeometry(3.3, totalTowerH - 3.0), glassMat);
+    southUpperGlass.position.set(7.27, 3.0 + (totalTowerH - 3.0) * 0.5, 3.52);
+    this.stairwellGroup.add(southUpperGlass);
 
-      if (f < 3) {
-        // Mid-landing at y0 + 1.6m, z = +2.2
-        const midLanding = new THREE.Mesh(new THREE.BoxGeometry(3.1, 0.16, 1.6), stepMat);
-        midLanding.position.set(7.2, y0 + FLOOR_HEIGHT * 0.5, 2.2);
-        this.stairwellGroup.add(midLanding);
+    // Penthouse skylight roof over stairwell at y = 15.8m
+    const skyCap = new THREE.Mesh(new THREE.BoxGeometry(3.5, 0.2, 7.8), frameMat);
+    skyCap.position.set(7.27, totalTowerH, -0.26);
+    this.stairwellGroup.add(skyCap);
 
-        // Flight 1 (up from y0 at z=-2.0 to y0+1.6 at z=+1.5 along x=6.55)
-        const flightLen = Math.hypot(3.5, FLOOR_HEIGHT * 0.5);
-        const pitch = Math.atan2(FLOOR_HEIGHT * 0.5, 3.5);
+    // Ground street threshold ramp into stairwell (z in [3.52..4.12])
+    const stairThreshold = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.1, 0.65), stepMat);
+    stairThreshold.position.set(7.27, 0.16, 3.82);
+    stairThreshold.rotation.x = 0.12;
+    this.stairwellGroup.add(stairThreshold);
 
-        const ramp1 = new THREE.Mesh(new THREE.BoxGeometry(1.15, 0.12, flightLen), stepMat);
-        ramp1.position.set(6.55, y0 + FLOOR_HEIGHT * 0.25, -0.25);
-        ramp1.rotation.x = -pitch;
-        this.stairwellGroup.add(ramp1);
+    // Build landings & U-turn flights from Piso 1 (f=0) all the way up to Rooftop (f=4)!
+    for (let f = 0; f <= 4; f++) {
+      const yFloor = f * FLOOR_HEIGHT + (f === 4 ? 0.28 : 0.22);
 
-        const rail1 = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, flightLen), railMat);
-        rail1.position.set(7.08, y0 + FLOOR_HEIGHT * 0.25 + 0.75, -0.25);
-        rail1.rotation.x = -pitch;
+      // South Floor Landing (z in [+1.55..+3.50], connects directly to floor doorway & street on f=0!)
+      const southLanding = new THREE.Mesh(new THREE.BoxGeometry(3.35, 0.18, 1.98), stepMat);
+      southLanding.position.set(7.25, yFloor - 0.09, 2.52);
+      southLanding.receiveShadow = true;
+      this.stairwellGroup.add(southLanding);
+
+      if (f < 4) {
+        const yMid = f * FLOOR_HEIGHT + 1.82;
+        const yNext = (f + 1) * FLOOR_HEIGHT + (f + 1 === 4 ? 0.28 : 0.22);
+
+        // North Mid-Landing (z in [-4.02..-2.15])
+        const northLanding = new THREE.Mesh(new THREE.BoxGeometry(3.25, 0.18, 1.9), stepMat);
+        northLanding.position.set(7.28, yMid - 0.09, -3.08);
+        northLanding.receiveShadow = true;
+        this.stairwellGroup.add(northLanding);
+
+        // Flight 1 (West lane x=6.45, going UP from South z=+1.55 to North z=-2.15)
+        const spanZ = 3.7;
+        const rise1 = yMid - yFloor;
+        const len1 = Math.hypot(spanZ, rise1);
+        const pitch1 = Math.atan2(rise1, spanZ);
+
+        const stringer1 = new THREE.Mesh(new THREE.BoxGeometry(1.38, 0.12, len1), stepMat);
+        stringer1.position.set(6.45, (yFloor + yMid) * 0.5 - 0.08, -0.3);
+        stringer1.rotation.x = pitch1;
+        this.stairwellGroup.add(stringer1);
+
+        // 10 crisp 3D stair steps on Flight 1
+        for (let s = 0; s < 10; s++) {
+          const frac = (s + 0.5) / 10;
+          const stepMesh = new THREE.Mesh(new THREE.BoxGeometry(1.36, 0.07, 0.36), treadMat);
+          stepMesh.position.set(6.45, yFloor + frac * rise1 - 0.03, 1.55 - frac * spanZ);
+          this.stairwellGroup.add(stepMesh);
+        }
+
+        const rail1 = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, len1), railMat);
+        rail1.position.set(7.22, (yFloor + yMid) * 0.5 + 0.85, -0.3);
+        rail1.rotation.x = pitch1;
         this.stairwellGroup.add(rail1);
 
-        // Flight 2 (up from y0+1.6 at z=+1.5 to y0+3.2 at z=-2.0 along x=7.85)
-        const ramp2 = new THREE.Mesh(new THREE.BoxGeometry(1.15, 0.12, flightLen), stepMat);
-        ramp2.position.set(7.85, y0 + FLOOR_HEIGHT * 0.75, -0.25);
-        ramp2.rotation.x = pitch;
-        this.stairwellGroup.add(ramp2);
+        // Flight 2 (East lane x=8.06, going UP from North z=-2.15 to South z=+1.55)
+        const rise2 = yNext - yMid;
+        const len2 = Math.hypot(spanZ, rise2);
+        const pitch2 = Math.atan2(rise2, spanZ);
 
-        const rail2 = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, flightLen), railMat);
-        rail2.position.set(7.32, y0 + FLOOR_HEIGHT * 0.75 + 0.75, -0.25);
-        rail2.rotation.x = pitch;
+        const stringer2 = new THREE.Mesh(new THREE.BoxGeometry(1.38, 0.12, len2), stepMat);
+        stringer2.position.set(8.06, (yMid + yNext) * 0.5 - 0.08, -0.3);
+        stringer2.rotation.x = -pitch2;
+        this.stairwellGroup.add(stringer2);
+
+        for (let s = 0; s < 10; s++) {
+          const frac = (s + 0.5) / 10;
+          const stepMesh = new THREE.Mesh(new THREE.BoxGeometry(1.36, 0.07, 0.36), treadMat);
+          stepMesh.position.set(8.06, yMid + frac * rise2 - 0.03, -2.15 + frac * spanZ);
+          this.stairwellGroup.add(stepMesh);
+        }
+
+        const rail2 = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, len2), railMat);
+        rail2.position.set(7.3, (yMid + yNext) * 0.5 + 0.85, -0.3);
+        rail2.rotation.x = -pitch2;
         this.stairwellGroup.add(rail2);
       }
     }
 
+    // Center divider spine rail
+    const spine = new THREE.Mesh(
+      new THREE.BoxGeometry(0.08, totalTowerH - 1.2, 3.65),
+      new THREE.MeshStandardMaterial({ color: 0x334155, transparent: true, opacity: 0.35 })
+    );
+    spine.position.set(7.25, (totalTowerH - 1.2) * 0.5 + 0.4, -0.3);
+    this.stairwellGroup.add(spine);
+
     // Stairwell emergency exit sign at ground door
     const exitSign = new THREE.Mesh(
-      new THREE.PlaneGeometry(2.5, 0.65),
+      new THREE.PlaneGeometry(2.65, 0.68),
       new THREE.MeshBasicMaterial({
-        map: makeLabelTexture('SALIDA ESCALERA', 'Evacuación Pisos 1–4', '#34d399'),
-        transparent: true
+        map: makeLabelTexture('ESCALERA PISOS 1–4', 'Entrada / Evacuación Peatonal', '#34d399'),
+        transparent: true,
+        side: THREE.DoubleSide
       })
     );
-    exitSign.position.set(7.2, 2.75, 3.28);
+    exitSign.position.set(7.27, 2.82, 3.58);
     this.stairwellGroup.add(exitSign);
   }
 
   _buildRooftop() {
-    // Roof slab at y = 12.8m covering building + stairwell
+    // Roof slab at y = 12.8m covering main building (leaving stairwell shaft open for roof access!)
     const roofSlab = new THREE.Mesh(
-      new THREE.BoxGeometry(18.0, 0.28, 8.4),
+      new THREE.BoxGeometry(14.5, 0.28, 8.4),
       new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.82 })
     );
-    roofSlab.position.set(0.1, 0.14, -0.35);
+    roofSlab.position.set(-1.55, 0.14, -0.35);
     roofSlab.castShadow = true;
     roofSlab.receiveShadow = true;
     this.rooftopGroup.add(roofSlab);
@@ -864,8 +982,25 @@ export class LPSBoxScene3D {
     snifferSign.position.set(sx, 2.52, sz + 0.18);
     fg2.add(snifferSign);
 
+    this.rpiBoardMesh = rpiBoard;
+    this.mpuChipMesh = mpuChip;
+    this.snifferNormalSign = snifferSign;
+
+    this.snifferDamagedSign = new THREE.Mesh(
+      new THREE.PlaneGeometry(3.35, 0.88),
+      new THREE.MeshBasicMaterial({
+        map: makeLabelTexture('⚠ SNIFFER BAJO ESCOMBROS', 'RPi 5 Dañado · t₀ Salvado en Poste', '#fb7185'),
+        transparent: true,
+        side: THREE.DoubleSide
+      })
+    );
+    this.snifferDamagedSign.position.set(sx, 2.48, sz + 0.32);
+    this.snifferDamagedSign.visible = false;
+    fg2.add(this.snifferDamagedSign);
+
     this.snifferMount = new THREE.Group();
-    this.snifferMount.position.set(sx, 1.12, sz);
+    this.snifferHomePos = new THREE.Vector3(sx, 1.12, sz);
+    this.snifferMount.position.copy(this.snifferHomePos);
     this.snifferScale = 0.88;
     this.snifferMount.scale.setScalar(this.snifferScale);
     fg2.add(this.snifferMount);
@@ -924,6 +1059,217 @@ export class LPSBoxScene3D {
         this.clickableSniffer.push(fb);
       }
     );
+  }
+
+  _buildBreakableStructure() {
+    const concreteMat = new THREE.MeshStandardMaterial({ color: 0x475569, roughness: 0.92, metalness: 0.08 });
+    const fracturedMat = new THREE.MeshStandardMaterial({ color: 0x64748b, roughness: 0.95, metalness: 0.05 });
+    const beamSteelMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.6, metalness: 0.55 });
+    const rebarMat = new THREE.MeshStandardMaterial({ color: 0x9a3412, roughness: 0.7, metalness: 0.6 });
+
+    const addFallingPiece = (parent, mesh, stage, startY, targetY, targetRot, dustWorldPos) => {
+      mesh.position.y = startY;
+      mesh.visible = false;
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      parent.add(mesh);
+      this.structuralPieces.push({
+        mesh,
+        stage,
+        startY,
+        targetY,
+        homeRot: mesh.rotation.clone(),
+        targetRot: new THREE.Euler(targetRot[0], targetRot[1], targetRot[2]),
+        vy: 0,
+        active: false,
+        landed: false,
+        dustWorldPos
+      });
+    };
+
+    // --- STAGE 1: West Wing Partial Structural Collapse (Piso 4 & Piso 3 slabs + rubble mounds) ---
+    const fg4 = this.floorGroups[3];
+    const westSlab4 = new THREE.Group();
+    westSlab4.position.set(-6.15, 2.95, -0.5);
+    const slabChunk4 = new THREE.Mesh(new THREE.BoxGeometry(4.2, 0.26, 5.4), concreteMat);
+    westSlab4.add(slabChunk4);
+    for (let r = -2; r <= 2; r++) {
+      const rebar = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.95, 6), rebarMat);
+      rebar.rotation.z = Math.PI / 2 + 0.18 * (r % 2);
+      rebar.position.set(2.35, 0, r * 0.95);
+      westSlab4.add(rebar);
+    }
+    addFallingPiece(fg4, westSlab4, 1, 2.95, 1.32, [0.06, 0.04, 0.48], [-6.2, 10.1, -0.4]);
+
+    [[-7.2, -1.8, 0.95], [-5.4, 0.8, 0.82], [-6.8, 1.5, 0.74], [-4.8, -1.1, 0.68]].forEach(([rx, rz, sz], idx) => {
+      const boulder = new THREE.Mesh(new THREE.DodecahedronGeometry(sz * 0.55, 0), fracturedMat);
+      boulder.position.set(rx, 2.8, rz);
+      boulder.scale.set(1.25, 0.62, 1.08);
+      addFallingPiece(fg4, boulder, 1, 2.85, 0.45, [0.3 * idx, 0.5 * idx, -0.25], [rx, 9.9, rz]);
+    });
+
+    const fg3 = this.floorGroups[2];
+    const westSlab3 = new THREE.Group();
+    westSlab3.position.set(-6.1, 2.95, -0.6);
+    const slabChunk3 = new THREE.Mesh(new THREE.BoxGeometry(4.0, 0.25, 5.1), concreteMat);
+    westSlab3.add(slabChunk3);
+    for (let r = -2; r <= 2; r++) {
+      const rebar = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.85, 6), rebarMat);
+      rebar.rotation.z = Math.PI / 2 - 0.14;
+      rebar.position.set(2.2, 0, r * 0.9);
+      westSlab3.add(rebar);
+    }
+    addFallingPiece(fg3, westSlab3, 1, 2.95, 1.28, [-0.05, 0.03, 0.46], [-6.1, 6.9, -0.6]);
+
+    [[-7.0, -1.4, 0.92], [-5.2, 0.6, 0.78], [-6.5, 1.4, 0.72]].forEach(([rx, rz, sz], idx) => {
+      const boulder = new THREE.Mesh(new THREE.DodecahedronGeometry(sz * 0.55, 0), fracturedMat);
+      boulder.position.set(rx, 2.8, rz);
+      boulder.scale.set(1.2, 0.6, 1.1);
+      addFallingPiece(fg3, boulder, 1, 2.8, 0.44, [0.4 * idx, 0.2, 0.3], [rx, 6.7, rz]);
+    });
+
+    // --- STAGE 2: Central Piso 3 Reinforced Beam & Slab Crushing & Burying Piso 2 Sniffer RPi 5! ---
+    const fg2 = this.floorGroups[1];
+    const sx = SNIFFER_WORLD_POS.x;
+    const sz = SNIFFER_WORLD_POS.z;
+
+    const crushingBeamGroup = new THREE.Group();
+    crushingBeamGroup.position.set(sx + 0.05, 3.02, sz + 0.26);
+    const iBeam = new THREE.Mesh(new THREE.BoxGeometry(2.55, 0.34, 0.44), beamSteelMat);
+    const brokenHeader = new THREE.Mesh(new THREE.BoxGeometry(2.35, 0.24, 1.35), concreteMat);
+    brokenHeader.position.set(0, 0.18, 0.15);
+    crushingBeamGroup.add(iBeam, brokenHeader);
+    for (let r = -2; r <= 2; r++) {
+      const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.75, 6), rebarMat);
+      bar.rotation.x = Math.PI / 2 + 0.2 * r;
+      bar.position.set(r * 0.45, 0.1, 0.68);
+      crushingBeamGroup.add(bar);
+    }
+    // Lands directly across the top/front of the Sniffer RPi 5 enclosure, burying it!
+    addFallingPiece(fg2, crushingBeamGroup, 2, 3.02, 1.46, [0.22, -0.14, -0.28], [sx, 4.4, sz + 0.2]);
+
+    // Rubble mound boulders burying the base and sides of the Sniffer RPi 5
+    const snifferRubbleOffsets = [
+      [-0.55, 0.38, 0.85, 0.48],
+      [0.52, 0.36, 0.82, 0.46],
+      [-0.12, 0.56, 0.78, 0.44],
+      [0.24, 0.65, 0.68, 0.38],
+      [-0.42, 0.72, 0.64, 0.36],
+      [0.05, 0.24, 0.72, 1.08],
+      [-0.28, 0.18, 0.58, 1.15]
+    ];
+    snifferRubbleOffsets.forEach(([ox, oz, rad, landY], idx) => {
+      const chunk = new THREE.Mesh(new THREE.DodecahedronGeometry(rad * 0.48, 0), idx % 2 === 0 ? fracturedMat : concreteMat);
+      chunk.position.set(sx + ox, 2.95, sz + oz);
+      chunk.scale.set(1.25, 0.68, 1.12);
+      addFallingPiece(
+        fg2,
+        chunk,
+        2,
+        2.95,
+        landY,
+        [0.5 * idx, 0.8 * idx, -0.35 * idx],
+        [sx + ox, 3.7, sz + oz]
+      );
+    });
+
+    // --- STAGE 3: Exterior Front-West Masonry Debris & Upper Stairwell Parapet ---
+    [[-6.6, 4.35, 0.85], [-5.5, 4.65, 0.76], [-4.6, 4.25, 0.68]].forEach(([mx, mz, mr], idx) => {
+      const masonry = new THREE.Mesh(new THREE.DodecahedronGeometry(mr * 0.56, 0), concreteMat);
+      masonry.position.set(mx, 12.4, mz);
+      masonry.scale.set(1.3, 0.62, 1.05);
+      addFallingPiece(this.worldGroup, masonry, 3, 12.4, 0.38, [0.4 * idx, 0.6 * idx, 0.25], [mx, 0.35, mz]);
+    });
+
+    const stairDebris = new THREE.Mesh(new THREE.DodecahedronGeometry(0.46, 0), fracturedMat);
+    stairDebris.position.set(6.25, 12.5, 2.35);
+    stairDebris.scale.set(1.3, 0.65, 1.1);
+    addFallingPiece(this.worldGroup, stairDebris, 3, 12.5, 10.05, [0.3, 0.5, -0.2], [6.25, 10.0, 2.35]);
+  }
+
+  _buildStaticColliders() {
+    this.staticColliders = [];
+    const addBox = (xMin, xMax, yMin, yMax, zMin, zMax) => {
+      this.staticColliders.push({ xMin, xMax, yMin, yMax, zMin, zMax });
+    };
+
+    // 1. Building Outer Structural Envelope
+    // Back concrete wall (z = -4.35)
+    addBox(-8.85, 5.62, 0.0, 14.2, -4.55, -4.18);
+    // West glass curtain wall (x = -8.6)
+    addBox(-8.82, -8.42, 0.0, 14.2, -4.55, 3.72);
+    // Piso 1 Front Facade left & right of Main Portal (portal opening is x in [-2.40..0.00])
+    addBox(-8.75, -2.38, 0.0, 3.15, 3.46, 3.74);
+    addBox(0.02, 5.58, 0.0, 3.15, 3.46, 3.74);
+    // Upper Floors (Pisos 2, 3, 4 + Roof) Front Safety Glass Balustrades
+    addBox(-8.75, 5.58, 3.22, 14.1, 3.46, 3.74);
+    // Rooftop back & side parapets
+    addBox(-8.85, 5.62, 12.8, 14.1, -4.55, -4.25);
+
+    // 2. Partition Wall between Building Floors & Stairwell (open doorway on each floor at z in [1.55..3.46])
+    addBox(5.38, 5.64, 0.0, 13.5, -4.45, 1.54);
+
+    // 3. Stairwell Enclosure & Center Divider Spine
+    // East glass wall
+    addBox(8.84, 9.15, 0.0, 16.0, -4.18, 3.65);
+    // North glass wall
+    addBox(5.55, 9.15, 0.0, 16.0, -4.25, -3.95);
+    // South stairwell upper glass wall (leaves ground exit y in [0..2.95] open to street!)
+    addBox(5.58, 9.10, 3.05, 16.0, 3.46, 3.72);
+    // Stairwell center handrail spine separating Flight 1 (x < 7.2) from Flight 2 (x > 7.3)
+    addBox(7.19, 7.32, 0.0, 15.6, -2.12, 1.52);
+
+    // 4. Interior Static Furniture Colliders per Floor
+    // Piso 1 (yBase = 0): Café bar counter + 4 round tables
+    addBox(-7.55, -4.05, 0.15, 1.45, -2.95, -2.02);
+    [[-5.2, 1.1], [-2.2, 1.2], [2.2, 1.1], [2.5, -1.8]].forEach(([tx, tz]) => {
+      addBox(tx - 0.68, tx + 0.68, 0.15, 1.15, tz - 0.68, tz + 0.68);
+    });
+
+    // Piso 2 (yBase = 3.2): 4 Electronics Lab benches + Central Sniffer RPi5 Pillar
+    [[-5.6, -1.6], [-5.6, 1.2], [2.4, -1.6], [2.4, 1.2]].forEach(([bx, bz]) => {
+      addBox(bx - 1.35, bx + 1.35, 3.35, 4.25, bz - 0.55, bz + 0.55);
+    });
+    addBox(SNIFFER_WORLD_POS.x - 0.45, SNIFFER_WORLD_POS.x + 0.45, 3.2, 5.9, SNIFFER_WORLD_POS.z - 0.52, SNIFFER_WORLD_POS.z + 0.22);
+
+    // Piso 3 (yBase = 6.4): 2 NOC desks
+    [[-6.0, 1.2], [2.2, 1.2]].forEach(([bx, bz]) => {
+      addBox(bx - 1.4, bx + 1.4, 6.55, 7.45, bz - 0.52, bz + 0.52);
+    });
+
+    // Piso 4 (yBase = 9.6): Podium + 6 auditorium desk blocks
+    addBox(-7.28, -6.32, 9.75, 10.95, -0.75, -0.05);
+    [-3.8, -1.2, 1.4].forEach((rx) => {
+      [-2.0, 0.9].forEach((rz) => {
+        addBox(rx - 0.8, rx + 0.8, 9.75, 10.55, rz - 0.9, rz + 0.9);
+      });
+    });
+
+    // 5. Outdoor Street Light Pole, Laptop Tripod & Street Planters
+    addBox(POLE_WORLD_POS.x - 0.38, POLE_WORLD_POS.x + 0.38, 0.0, 7.5, POLE_WORLD_POS.z - 0.38, POLE_WORLD_POS.z + 0.38);
+    addBox(POLE_WORLD_POS.x - 1.85, POLE_WORLD_POS.x - 1.15, 0.0, 1.35, POLE_WORLD_POS.z - 0.35, POLE_WORLD_POS.z + 0.35);
+    [[-12.2, 4.9], [11.8, 4.9], [-11.5, 11.2], [11.6, 11.4]].forEach(([tx, tz]) => {
+      addBox(tx - 0.72, tx + 0.72, 0.0, 3.2, tz - 0.72, tz + 0.72);
+    });
+
+    // 6. Catastrophic Rubble Colliders (activated dynamically when stage >= c.stage)
+    this.collapseColliders = [
+      // Stage 1: Collapsed West Wing slabs on Pisos 4 & 3
+      { stage: 1, xMin: -8.5, xMax: -3.95, yMin: 9.75, yMax: 12.2, zMin: -3.4, zMax: 2.2 },
+      { stage: 1, xMin: -8.5, xMax: -4.05, yMin: 6.55, yMax: 9.0, zMin: -3.3, zMax: 2.0 },
+      // Stage 2: Fallen Central Beam & Concrete Rubble Mound burying Piso 2 Sniffer
+      {
+        stage: 2,
+        xMin: SNIFFER_WORLD_POS.x - 1.32,
+        xMax: SNIFFER_WORLD_POS.x + 1.35,
+        yMin: 3.35,
+        yMax: 5.15,
+        zMin: SNIFFER_WORLD_POS.z - 0.55,
+        zMax: SNIFFER_WORLD_POS.z + 1.05
+      },
+      // Stage 3: Exterior fallen masonry on front-west sidewalk
+      { stage: 3, xMin: -7.25, xMax: -4.15, yMin: 0.0, yMax: 1.25, zMin: 3.8, zMax: 5.15 }
+    ];
   }
 
   _buildStreetLightPoleGateway() {
@@ -1372,6 +1718,8 @@ export class LPSBoxScene3D {
     this.dynamicProps.forEach((p) => {
       p.mesh.position.copy(p.homePos);
       p.mesh.rotation.set(0, 0, 0);
+      p.slideVx = 0;
+      p.slideVz = 0;
       if (p.kind === 'lamp') {
         p.angleX = 0;
         p.angleZ = 0;
@@ -1399,6 +1747,26 @@ export class LPSBoxScene3D {
         p.vy = 0;
       }
     });
+
+    // Reset breakable structural collapse slabs, beams & rubble
+    this._lastStructuralStage = 0;
+    this.structuralPieces.forEach((sp) => {
+      sp.active = false;
+      sp.landed = false;
+      sp.vy = 0;
+      sp.mesh.visible = false;
+      sp.mesh.position.y = sp.startY;
+      sp.mesh.rotation.copy(sp.homeRot);
+    });
+
+    // Restore Sniffer RPi 5 mount & signage
+    if (this.snifferMount && this.snifferHomePos) {
+      this.snifferMount.position.copy(this.snifferHomePos);
+      this.snifferMount.rotation.set(0, 0, 0);
+    }
+    if (this.snifferNormalSign) this.snifferNormalSign.visible = true;
+    if (this.snifferDamagedSign) this.snifferDamagedSign.visible = false;
+    if (this.rpiBoardMesh) this.rpiBoardMesh.rotation.set(0, 0, 0);
   }
 
   _spawnDustPuff(worldX, worldY, worldZ, scale = 1.0) {
@@ -1445,16 +1813,29 @@ export class LPSBoxScene3D {
   _updateDynamicProps(dt) {
     if (this._crashSoundCooldown > 0) this._crashSoundCooldown -= dt;
 
-    const gX = this.sim.accel.x;
-    const gZ = this.sim.accel.y;
-    const dynG = this.sim.accel.dynamicG;
+    const ga = this.sim.groundAccel || this.sim.accel;
+    const gX = ga.x;
+    const gZ = ga.y;
+    const dynG = ga.dynamicG;
     const qActive = this.sim.quakeActive;
     const qTime = this.sim.quakeElapsed;
-    const isMajor = this.sim.scenario === 'major';
+    const isCatastrophic = this.sim.scenario === 'catastrophic';
+    const isSevere = this.sim.scenario === 'major' || isCatastrophic;
     const isMild = this.sim.scenario === 'mild';
+    const timeMult = isCatastrophic ? 0.68 : 1.0;
 
     this.dynamicProps.forEach((p) => {
       const fBaseY = p.floor * FLOOR_HEIGHT;
+
+      // Apply Operator-kicked / shoved horizontal sliding physics!
+      if (p.slideVx || p.slideVz) {
+        p.mesh.position.x = Math.max(-8.15, Math.min(5.1, p.mesh.position.x + (p.slideVx || 0) * dt));
+        p.mesh.position.z = Math.max(-3.95, Math.min(3.25, p.mesh.position.z + (p.slideVz || 0) * dt));
+        p.mesh.rotation.y += ((p.slideVx || 0) - (p.slideVz || 0)) * 0.65 * dt;
+        const damp = Math.exp(-4.6 * dt);
+        p.slideVx = Math.abs(p.slideVx * damp) > 0.02 ? p.slideVx * damp : 0;
+        p.slideVz = Math.abs(p.slideVz * damp) > 0.02 ? p.slideVz * damp : 0;
+      }
 
       if (p.kind === 'lamp') {
         if (!p.snapped) {
@@ -1474,7 +1855,7 @@ export class LPSBoxScene3D {
               dynG > 0.08 ? (Math.random() > 0.35 ? 0.75 : 0.12) : 0.55;
           }
 
-          if (qActive && isMajor && p.willSnap && qTime >= p.snapTime) {
+          if (qActive && isSevere && (p.willSnap || isCatastrophic) && qTime >= p.snapTime * timeMult) {
             p.snapped = true;
             p.vy = -0.5;
             this._spawnElectricSparks(p.mesh.position.x, fBaseY + p.mesh.position.y, p.mesh.position.z);
@@ -1493,7 +1874,7 @@ export class LPSBoxScene3D {
         }
       } else if (p.kind === 'shelf') {
         if (!p.toppled) {
-          if (qActive && isMajor && p.canTopple && qTime >= p.toppleTime) {
+          if (qActive && isSevere && (p.canTopple || isCatastrophic) && qTime >= p.toppleTime * timeMult) {
             p.angVel += p.fallDir * 4.8 * dt;
             p.tiltZ += p.angVel * dt;
             if (Math.abs(p.tiltZ) >= Math.PI * 0.47) {
@@ -1521,7 +1902,7 @@ export class LPSBoxScene3D {
             p.mesh.position.x = p.homePos.x + Math.sin(this.sim.time * 28 + p.floor) * dynG * 0.08;
           }
           const triggerMild = qActive && isMild && p.mildFall && qTime >= p.mildTriggerTime;
-          const triggerMajor = qActive && isMajor && qTime >= p.majorTriggerTime;
+          const triggerMajor = qActive && isSevere && qTime >= p.majorTriggerTime * timeMult;
           const triggerHit = this.sim.tableShockTimer > 0.35 && p.mildFall;
           if (triggerMild || triggerMajor || triggerHit) {
             p.dislodged = true;
@@ -1529,9 +1910,9 @@ export class LPSBoxScene3D {
           }
         } else if (!p.landed) {
           p.vy -= 9.8 * dt;
-          p.mesh.position.x += p.vx * dt;
+          p.mesh.position.x = Math.max(-8.15, Math.min(5.1, p.mesh.position.x + p.vx * dt));
           p.mesh.position.y += p.vy * dt;
-          p.mesh.position.z += p.vz * dt;
+          p.mesh.position.z = Math.max(-3.95, Math.min(3.25, p.mesh.position.z + p.vz * dt));
           p.mesh.rotation.x += p.rx * dt;
           p.mesh.rotation.z += p.rz * dt;
           if (p.mesh.position.y <= 0.34) {
@@ -1548,13 +1929,13 @@ export class LPSBoxScene3D {
         }
       } else if (p.kind === 'wall_frame') {
         if (!p.fallen) {
-          if (qActive && (isMild || isMajor) && qTime > 2.0) {
+          if (qActive && (isMild || isSevere) && qTime > 2.0 * timeMult) {
             p.tilted = true;
           }
           if (p.tilted) {
             p.mesh.rotation.z = 0.28 + Math.sin(this.sim.time * 10) * Math.min(0.12, dynG * 0.25);
           }
-          if (qActive && isMajor && qTime >= p.fallTime) {
+          if (qActive && isSevere && qTime >= p.fallTime * timeMult) {
             p.vy -= 9.8 * dt;
             p.mesh.position.y += p.vy * dt;
             p.mesh.position.z += 0.35 * dt;
@@ -1569,7 +1950,7 @@ export class LPSBoxScene3D {
         }
       } else if (p.kind === 'ceiling_tile') {
         if (!p.detached) {
-          if (qActive && isMajor && qTime >= p.detachTime) {
+          if (qActive && isSevere && qTime >= p.detachTime * timeMult) {
             p.detached = true;
             p.vy = -0.3;
           }
@@ -1588,6 +1969,71 @@ export class LPSBoxScene3D {
         }
       }
     });
+  }
+
+  _updateBreakableStructure(dt) {
+    const curStage = this.sim.structuralCollapseStage || 0;
+
+    if (curStage === 0 && (this._lastStructuralStage > 0 || this.snifferDamagedSign?.visible)) {
+      this.resetDynamicProps();
+      return;
+    }
+
+    if (curStage > this._lastStructuralStage) {
+      this._lastStructuralStage = curStage;
+      this.structuralPieces.forEach((sp) => {
+        if (sp.stage <= curStage && !sp.active) {
+          sp.active = true;
+          sp.mesh.visible = true;
+          sp.vy = -1.2;
+          const [dx, dy, dz] = sp.dustWorldPos;
+          this._spawnDustPuff(dx, dy + 1.2, dz, 1.8);
+        }
+      });
+    }
+
+    this.structuralPieces.forEach((sp) => {
+      if (!sp.active || sp.landed) return;
+      sp.vy -= 15.5 * dt;
+      sp.mesh.position.y += sp.vy * dt;
+
+      const totalDrop = Math.max(0.2, sp.startY - sp.targetY);
+      const frac = Math.min(1.0, Math.max(0.0, (sp.startY - sp.mesh.position.y) / totalDrop));
+      sp.mesh.rotation.x = THREE.MathUtils.lerp(sp.homeRot.x, sp.targetRot.x, frac);
+      sp.mesh.rotation.y = THREE.MathUtils.lerp(sp.homeRot.y, sp.targetRot.y, frac);
+      sp.mesh.rotation.z = THREE.MathUtils.lerp(sp.homeRot.z, sp.targetRot.z, frac);
+
+      if (sp.mesh.position.y <= sp.targetY) {
+        sp.mesh.position.y = sp.targetY;
+        sp.mesh.rotation.copy(sp.targetRot);
+        sp.landed = true;
+        const [dx, dy, dz] = sp.dustWorldPos;
+        this._spawnDustPuff(dx, dy, dz, 2.35);
+        if (sp.stage === 2) {
+          this._spawnElectricSparks(SNIFFER_WORLD_POS.x, SNIFFER_WORLD_POS.y + 0.25, SNIFFER_WORLD_POS.z + 0.15);
+        }
+      }
+    });
+
+    // Damaged & rubble-buried Sniffer RPi 5 pose + intermittent short-circuit sparks!
+    if (this.sim.snifferDamaged && this.snifferMount && this.snifferHomePos) {
+      this.snifferMount.position.x = THREE.MathUtils.lerp(this.snifferMount.position.x, this.snifferHomePos.x + 0.06, 6 * dt);
+      this.snifferMount.position.y = THREE.MathUtils.lerp(this.snifferMount.position.y, this.snifferHomePos.y - 0.18, 6 * dt);
+      this.snifferMount.position.z = THREE.MathUtils.lerp(this.snifferMount.position.z, this.snifferHomePos.z + 0.08, 6 * dt);
+      this.snifferMount.rotation.x = THREE.MathUtils.lerp(this.snifferMount.rotation.x, 0.26, 6 * dt);
+      this.snifferMount.rotation.y = THREE.MathUtils.lerp(this.snifferMount.rotation.y, -0.18, 6 * dt);
+      this.snifferMount.rotation.z = THREE.MathUtils.lerp(this.snifferMount.rotation.z, 0.34, 6 * dt);
+
+      if (this.snifferNormalSign) this.snifferNormalSign.visible = false;
+      if (this.snifferDamagedSign) this.snifferDamagedSign.visible = true;
+      if (this.rpiBoardMesh) this.rpiBoardMesh.rotation.z = -0.42;
+
+      this._sparkDamageTimer -= dt;
+      if (this._sparkDamageTimer <= 0) {
+        this._sparkDamageTimer = 1.35 + Math.random() * 1.9;
+        this._spawnElectricSparks(SNIFFER_WORLD_POS.x + 0.08, SNIFFER_WORLD_POS.y + 0.15, SNIFFER_WORLD_POS.z + 0.16);
+      }
+    }
   }
 
   _buildParticlePools() {
@@ -2007,14 +2453,83 @@ export class LPSBoxScene3D {
     const w = this.snifferOledCanvas.width;
     const h = this.snifferOledCanvas.height;
 
+    // Special shattered/buried OLED state when Piso 2 Sniffer RPi 5 is crushed under rubble!
+    if (this.sim.snifferDamaged) {
+      ctx.fillStyle = '#090306';
+      ctx.fillRect(0, 0, w, h);
+
+      // Glitch scanline bars
+      for (let i = 0; i < 9; i++) {
+        const gy = ((Math.floor(this.sim.time * 18) * 37 + i * 43) % h);
+        ctx.fillStyle = i % 2 === 0 ? 'rgba(244, 63, 94, 0.22)' : 'rgba(56, 189, 248, 0.14)';
+        ctx.fillRect(0, gy, w, 6 + (i % 3) * 4);
+      }
+
+      // Dead dark upper-right corner quadrant from beam impact
+      ctx.fillStyle = '#020204';
+      ctx.beginPath();
+      ctx.moveTo(w * 0.56, 0);
+      ctx.lineTo(w, 0);
+      ctx.lineTo(w, h * 0.62);
+      ctx.lineTo(w * 0.68, h * 0.44);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.strokeStyle = '#fb7185';
+      ctx.lineWidth = 7;
+      ctx.strokeRect(4, 4, w - 8, h - 8);
+
+      ctx.fillStyle = '#fda4af';
+      ctx.font = 'bold 21px monospace';
+      ctx.fillText('RPi5 · MPU6050 · SIN SEÑAL', 24, 44);
+
+      ctx.fillStyle = '#fb7185';
+      ctx.font = 'bold 48px system-ui, sans-serif';
+      ctx.fillText('DAÑO CRÍTICO', 26, 132);
+
+      ctx.fillStyle = '#ffe4e6';
+      ctx.font = 'bold 28px system-ui, sans-serif';
+      ctx.fillText('BAJO ESCOMBROS · PISO 2', 26, 184);
+
+      ctx.fillStyle = '#fbbf24';
+      ctx.font = 'bold 24px monospace';
+      ctx.fillText('CAJA NEGRA t₀ SALVADA EN POSTE', 26, 242);
+
+      ctx.fillStyle = '#64748b';
+      ctx.font = 'bold 21px monospace';
+      ctx.fillText('LINK RF: OFFLINE  |  ADC: ERR', 26, 298);
+
+      // Spiderweb shattered glass crack lines radiating from impact point (355, 96)
+      const ix = 355;
+      const iy = 96;
+      const rays = [
+        [24, 18], [120, 6], [250, 8], [498, 22], [504, 155],
+        [488, 310], [340, 344], [165, 340], [18, 265], [14, 130]
+      ];
+      ctx.strokeStyle = 'rgba(241, 245, 249, 0.82)';
+      ctx.lineWidth = 2.6;
+      rays.forEach(([rx, ry], idx) => {
+        ctx.beginPath();
+        ctx.moveTo(ix, iy);
+        ctx.lineTo((ix + rx) * 0.5 + (idx % 2 === 0 ? 14 : -12), (iy + ry) * 0.5 + (idx % 3 === 0 ? -10 : 11));
+        ctx.lineTo(rx, ry);
+        ctx.stroke();
+      });
+
+      this.snifferLedMat.color.setHex(Math.floor(this.sim.time * 14) % 5 === 0 ? 0xfb7185 : 0x1a050a);
+      this.snifferOledTex.needsUpdate = true;
+      return;
+    }
+
+    const isCatastrophic = this.sim.scenario === 'catastrophic' && (this.sim.quakeActive || this.sim.frozenSnapshot);
     const isMajor = this.sim.scenario === 'major' && (this.sim.quakeActive || this.sim.frozenSnapshot);
     const isMild = this.sim.scenario === 'mild' && (this.sim.quakeActive || this.sim.frozenSnapshot);
 
-    // Full bezel-filling frame with signature cyan/amber/red border matching bozeto del sniffer rediseño IA.jpg
-    ctx.fillStyle = isMajor ? '#240709' : isMild ? '#221705' : '#060c15';
+    // Full bezel-filling frame with signature cyan/amber/red/purple border matching bozeto del sniffer rediseño IA.jpg
+    ctx.fillStyle = isCatastrophic ? '#2a0628' : isMajor ? '#240709' : isMild ? '#221705' : '#060c15';
     ctx.fillRect(0, 0, w, h);
 
-    ctx.strokeStyle = isMajor ? '#ef4444' : isMild ? '#f59e0b' : '#14b8a6';
+    ctx.strokeStyle = isCatastrophic ? '#c084fc' : isMajor ? '#ef4444' : isMild ? '#f59e0b' : '#14b8a6';
     ctx.lineWidth = 7;
     ctx.strokeRect(4, 4, w - 8, h - 8);
 
@@ -2029,7 +2544,15 @@ export class LPSBoxScene3D {
     ctx.fillStyle = '#34d399';
     ctx.fillRect(434, 30, 40, 16);
 
-    if (isMajor) {
+    if (isCatastrophic) {
+      ctx.fillStyle = '#e879f9';
+      ctx.font = 'bold 56px system-ui, sans-serif';
+      ctx.fillText('COLAPSO 7.8', 30, 148);
+      ctx.fillStyle = '#faf5ff';
+      ctx.font = 'bold 31px system-ui, sans-serif';
+      ctx.fillText('TX t₀ urgente → Poste Ext.', 30, 212);
+      this.snifferLedMat.color.setHex(Math.floor(this.sim.time * 14) % 2 === 0 ? 0xe879f9 : 0xef4444);
+    } else if (isMajor) {
       ctx.fillStyle = '#f87171';
       ctx.font = 'bold 68px system-ui, sans-serif';
       ctx.fillText('ALERTA', 34, 152);
@@ -2099,8 +2622,13 @@ export class LPSBoxScene3D {
         this.linkLineGeo.setFromPoints(new THREE.CatmullRomCurve3(pts).getPoints(36));
         this.snifferGatewayBeam.computeLineDistances();
       }
-      this.linkLineMat.color.setHex(this.sim.gatewayLeds.yellow ? 0xfbbf24 : 0x38bdf8);
-      this.linkLineMat.opacity = this.sim.gatewayLeds.blink ? 0.95 : 0.42;
+      if (this.sim.snifferDamaged) {
+        this.linkLineMat.color.setHex(0xfb7185);
+        this.linkLineMat.opacity = 0.22;
+      } else {
+        this.linkLineMat.color.setHex(this.sim.gatewayLeds.yellow ? 0xfbbf24 : 0x38bdf8);
+        this.linkLineMat.opacity = this.sim.gatewayLeds.blink ? 0.95 : 0.42;
+      }
     } else {
       this.snifferGatewayBeam.visible = false;
     }
@@ -2124,12 +2652,44 @@ export class LPSBoxScene3D {
 
   _bindInputs() {
     window.addEventListener('keydown', (e) => {
+      const tag = document.activeElement?.tagName;
+      if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+
       const k = e.key.toLowerCase();
-      if (k in this.keys) this.keys[k] = true;
+      if (e.code === 'Space') {
+        this.keys.space = true;
+        if (this.cameraMode === 'firstperson' || this.cameraMode === 'freefly') {
+          e.preventDefault();
+        }
+      } else if (e.key === 'Shift') {
+        this.keys.shift = true;
+      } else if (k === 'c') {
+        this.keys.c = true;
+        if (this.cameraMode === 'firstperson' && !e.repeat) {
+          this.fpCrouching = !this.fpCrouching;
+        }
+      } else if (k === 'f' && !e.repeat) {
+        if (this.cameraMode === 'firstperson') {
+          this.triggerOperatorShove();
+        }
+      } else if (k === 'l' && !e.repeat) {
+        this.toggleFlashlight();
+      } else if (k in this.keys) {
+        this.keys[k] = true;
+      }
     });
+
     window.addEventListener('keyup', (e) => {
       const k = e.key.toLowerCase();
-      if (k in this.keys) this.keys[k] = false;
+      if (e.code === 'Space') {
+        this.keys.space = false;
+      } else if (e.key === 'Shift') {
+        this.keys.shift = false;
+      } else if (k === 'c') {
+        this.keys.c = false;
+      } else if (k in this.keys) {
+        this.keys[k] = false;
+      }
     });
 
     const dom = this.renderer.domElement;
@@ -2148,9 +2708,9 @@ export class LPSBoxScene3D {
     });
 
     dom.addEventListener('pointermove', (e) => {
-      if (this.cameraMode === 'firstperson' && this.isPointerDragging) {
-        this.fpYaw -= e.movementX * 0.004;
-        this.fpPitch = Math.max(-1.1, Math.min(1.15, this.fpPitch - e.movementY * 0.003));
+      if ((this.cameraMode === 'firstperson' || this.cameraMode === 'freefly') && this.isPointerDragging) {
+        this.fpYaw -= e.movementX * 0.0042;
+        this.fpPitch = Math.max(-1.38, Math.min(1.38, this.fpPitch - e.movementY * 0.0034));
       }
     });
 
@@ -2180,9 +2740,276 @@ export class LPSBoxScene3D {
     });
   }
 
+  toggleFlashlight(forceState) {
+    this.fpFlashlightOn = typeof forceState === 'boolean' ? forceState : !this.fpFlashlightOn;
+    if (this.operatorFlashlight) {
+      this.operatorFlashlight.intensity = this.fpFlashlightOn ? 3.4 : 0.0;
+    }
+    if (this.cb.onFlashlightChange) {
+      this.cb.onFlashlightChange(this.fpFlashlightOn);
+    }
+    return this.fpFlashlightOn;
+  }
+
+  triggerOperatorShove() {
+    if (this.cameraMode !== 'firstperson') return 0;
+
+    const fwdX = -Math.sin(this.fpYaw);
+    const fwdZ = -Math.cos(this.fpYaw);
+    const opX = this.fpPos.x;
+    const opZ = this.fpPos.z;
+    const opFeetY = this.fpPos.y;
+    let pushedCount = 0;
+
+    this.dynamicProps.forEach((p) => {
+      const fBaseY = p.floor * FLOOR_HEIGHT;
+      if (Math.abs(fBaseY - opFeetY) > 1.75) return;
+
+      const dx = p.mesh.position.x - opX;
+      const dz = p.mesh.position.z - opZ;
+      const dist = Math.hypot(dx, dz);
+      if (dist > 2.85 || dist < 0.05) return;
+
+      const dot = (dx * fwdX + dz * fwdZ) / dist;
+      if (dot < 0.25) return;
+
+      const impulse = (1.0 - dist / 3.1) * 5.8;
+      if (p.kind === 'item') {
+        p.dislodged = true;
+        p.landed = false;
+        p.vx = fwdX * impulse + (dx / dist) * 1.8;
+        p.vz = fwdZ * impulse + (dz / dist) * 1.8;
+        p.vy = 2.15;
+        p.rx = 4.5;
+        p.rz = -3.8;
+        pushedCount++;
+      } else if (p.kind === 'lamp') {
+        if (!p.snapped) {
+          p.velZ -= fwdX * 7.5;
+          p.velX += fwdZ * 7.5;
+          pushedCount++;
+        } else if (p.fallen) {
+          p.slideVx = (p.slideVx || 0) + fwdX * impulse;
+          p.slideVz = (p.slideVz || 0) + fwdZ * impulse;
+          pushedCount++;
+        }
+      } else if (p.kind === 'ceiling_tile' && p.landed) {
+        p.slideVx = (p.slideVx || 0) + fwdX * impulse * 1.15;
+        p.slideVz = (p.slideVz || 0) + fwdZ * impulse * 1.15;
+        pushedCount++;
+      } else if (p.kind === 'wall_frame' && p.fallen) {
+        p.slideVx = (p.slideVx || 0) + fwdX * impulse;
+        p.slideVz = (p.slideVz || 0) + fwdZ * impulse;
+        pushedCount++;
+      } else if (p.kind === 'shelf' && !p.toppled) {
+        p.angVel += p.fallDir * 2.4;
+        pushedCount++;
+      }
+    });
+
+    // If standing right in front of the intact Piso 2 Sniffer RPi 5, physically tap its mount!
+    if (
+      Math.abs(opFeetY - 3.42) < 0.7 &&
+      Math.hypot(opX - SNIFFER_WORLD_POS.x, opZ - SNIFFER_WORLD_POS.z) < 2.3 &&
+      !this.sim.snifferDamaged
+    ) {
+      this.sim.hitSnifferTable();
+      pushedCount++;
+    }
+
+    if (this.cb.onOperatorShove) {
+      this.cb.onOperatorShove(pushedCount);
+    }
+    return pushedCount;
+  }
+
+  _getSupportHeight(x, z, feetY) {
+    const maxStep = 0.54;
+    let best = 0.0;
+
+    const consider = (h) => {
+      if (h <= feetY + maxStep && h > best) {
+        best = h;
+      }
+    };
+
+    // 1. Exterior urban sidewalks & roadway
+    if (x >= -15.5 && x <= 15.5 && z >= -7.0 && z <= 14.5) {
+      if (z >= 5.8 && z <= 7.1) {
+        consider(0.06); // Asphalt street
+      } else {
+        consider(0.14); // Sidewalk / concrete plaza
+      }
+    }
+
+    // 2. Front Entrance Threshold Ramp (Lobby portal x in [-2.42..0.02], z in [3.50..4.35])
+    if (x >= -2.45 && x <= 0.05 && z >= 3.50 && z <= 4.35) {
+      const t = Math.max(0, Math.min(1, (4.35 - z) / 0.85));
+      consider(0.14 + t * 0.08);
+    }
+
+    // 3. Stairwell Ground Threshold Ramp (x in [5.85..8.75], z in [3.50..4.15])
+    if (x >= 5.85 && x <= 8.75 && z >= 3.50 && z <= 4.15) {
+      const t = Math.max(0, Math.min(1, (4.15 - z) / 0.65));
+      consider(0.14 + t * 0.08);
+    }
+
+    // 4. Main 4-Story Floor Slabs (x in [-8.70..5.58], z in [-4.45..3.62])
+    if (x >= -8.70 && x <= 5.58 && z >= -4.45 && z <= 3.62) {
+      for (let f = 0; f < 4; f++) {
+        consider(f * FLOOR_HEIGHT + 0.22);
+      }
+      // Rooftop main deck (f = 4)
+      consider(4 * FLOOR_HEIGHT + 0.28);
+    }
+
+    // 5. Walkable U-Turn Stairwell Landings & Flights (x in [5.48..8.92], z in [-4.08..3.56])
+    if (x >= 5.48 && x <= 8.92 && z >= -4.08 && z <= 3.56) {
+      for (let f = 0; f <= 4; f++) {
+        const yFloor = f * FLOOR_HEIGHT + (f === 4 ? 0.28 : 0.22);
+
+        // South Floor Landing (z in [1.50..3.56])
+        if (z >= 1.50 && z <= 3.56) {
+          if (f < 4 || x >= 7.20) {
+            consider(yFloor);
+          }
+        }
+
+        if (f < 4) {
+          const yMid = f * FLOOR_HEIGHT + 1.82;
+          const yNext = (f + 1) * FLOOR_HEIGHT + (f + 1 === 4 ? 0.28 : 0.22);
+
+          // North Mid-Landing (z in [-4.08..-2.10])
+          if (z >= -4.08 && z <= -2.10 && x >= 5.65) {
+            consider(yMid);
+          }
+
+          // Flight 1 (West lane x in [5.65..7.25], rising North from z=+1.55 -> z=-2.15)
+          if (x >= 5.65 && x <= 7.25 && z >= -2.18 && z <= 1.58) {
+            const frac = Math.max(0, Math.min(1, (1.55 - z) / 3.70));
+            consider(yFloor + frac * (yMid - yFloor));
+          }
+
+          // Flight 2 (East lane x in [7.25..8.92], rising South from z=-2.15 -> z=+1.55)
+          if (x >= 7.25 && x <= 8.92 && z >= -2.18 && z <= 1.58) {
+            const frac = Math.max(0, Math.min(1, (z - -2.15) / 3.70));
+            consider(yMid + frac * (yNext - yMid));
+          }
+        }
+      }
+    }
+
+    return best;
+  }
+
+  _resolveOperatorCollisions(nextX, nextZ, feetY, headY) {
+    const radius = 0.34;
+    let rx = Math.max(-24.0, Math.min(24.0, nextX));
+    let rz = Math.max(-13.5, Math.min(20.5, nextZ));
+    let hitWall = false;
+
+    const resolveBoxList = (boxes, checkStage = false) => {
+      const stage = this.sim.structuralCollapseStage || 0;
+      for (let i = 0; i < boxes.length; i++) {
+        const b = boxes[i];
+        if (checkStage && stage < b.stage) continue;
+        // Skip obstacles strictly below step-up threshold or above head
+        if (headY <= b.yMin + 0.05 || feetY >= b.yMax - 0.32) continue;
+
+        const closestX = Math.max(b.xMin, Math.min(rx, b.xMax));
+        const closestZ = Math.max(b.zMin, Math.min(rz, b.zMax));
+        const dx = rx - closestX;
+        const dz = rz - closestZ;
+        const distSq = dx * dx + dz * dz;
+
+        if (distSq < radius * radius) {
+          hitWall = true;
+          if (distSq > 1e-6) {
+            const dist = Math.sqrt(distSq);
+            const push = radius - dist;
+            rx += (dx / dist) * push;
+            rz += (dz / dist) * push;
+          } else {
+            // Center inside AABB: push out along shallowest axis
+            const penLeft = Math.abs(rx - b.xMin);
+            const penRight = Math.abs(b.xMax - rx);
+            const penBack = Math.abs(rz - b.zMin);
+            const penFront = Math.abs(b.zMax - rz);
+            const minPen = Math.min(penLeft, penRight, penBack, penFront);
+            if (minPen === penLeft) rx = b.xMin - radius;
+            else if (minPen === penRight) rx = b.xMax + radius;
+            else if (minPen === penBack) rz = b.zMin - radius;
+            else rz = b.zMax + radius;
+          }
+        }
+      }
+    };
+
+    // 2 solver iterations ensure smooth corner & corridor sliding without snagging!
+    for (let pass = 0; pass < 2; pass++) {
+      resolveBoxList(this.staticColliders, false);
+      resolveBoxList(this.collapseColliders, true);
+    }
+
+    return { x: rx, z: rz, hitWall };
+  }
+
+  _pushNearbyDynamicProps(opX, opFeetY, opZ, velX, velZ) {
+    this.dynamicProps.forEach((p) => {
+      const fBaseY = p.floor * FLOOR_HEIGHT;
+      if (Math.abs(fBaseY - opFeetY) > 1.35) return;
+      const isFloorProp =
+        (p.kind === 'item' && p.landed) ||
+        (p.kind === 'ceiling_tile' && p.landed) ||
+        (p.kind === 'wall_frame' && p.fallen) ||
+        (p.kind === 'lamp' && p.fallen);
+      if (!isFloorProp) return;
+
+      const dx = p.mesh.position.x - opX;
+      const dz = p.mesh.position.z - opZ;
+      const dist = Math.hypot(dx, dz);
+      if (dist < 0.78 && dist > 0.01) {
+        const push = (0.78 - dist) * 5.2;
+        p.slideVx = (p.slideVx || 0) + (dx / dist) * push + velX * 0.35;
+        p.slideVz = (p.slideVz || 0) + (dz / dist) * push + velZ * 0.35;
+      }
+    });
+  }
+
+  getOperatorStatus() {
+    const y = this.cameraMode === 'freefly' ? this.camera.position.y : this.fpPos.y;
+    const x = this.cameraMode === 'freefly' ? this.camera.position.x : this.fpPos.x;
+    const z = this.cameraMode === 'freefly' ? this.camera.position.z : this.fpPos.z;
+
+    let location = 'Calle / Plaza Exterior';
+    if (x >= 5.48 && x <= 9.0 && z >= -4.1 && z <= 3.6) {
+      const approxFloor = Math.min(4, Math.max(1, Math.floor((y + 0.4) / FLOOR_HEIGHT) + 1));
+      location = y > 12.8 ? 'Acceso Azotea' : `Escalera · Nivel Piso ${approxFloor}`;
+    } else if (x >= -8.8 && x <= 5.58 && z >= -4.5 && z <= 3.65) {
+      if (y >= 12.7) location = 'Azotea Técnica (13.1m)';
+      else if (y >= 9.5) location = 'Piso 4 — Auditorio';
+      else if (y >= 6.3) location = 'Piso 3 — Servidores';
+      else if (y >= 3.1) location = 'Piso 2 — Lab & Sniffer RPi5';
+      else location = 'Piso 1 — Cafetería & Lobby';
+    }
+
+    return {
+      mode: this.cameraMode,
+      location,
+      x,
+      y,
+      z,
+      grounded: this.fpGrounded,
+      crouching: this.fpCrouching,
+      flashlight: this.fpFlashlightOn
+    };
+  }
+
   setCameraMode(mode) {
     this.stopIntroOrbit();
+    const prevMode = this.cameraMode;
     this.cameraMode = mode;
+
     if (mode === 'tactical') {
       this.controls.enabled = true;
       this.camera.position.set(1.5, 13.8, 25.5);
@@ -2206,10 +3033,56 @@ export class LPSBoxScene3D {
       );
     } else if (mode === 'firstperson') {
       this.controls.enabled = false;
-      this.camera.position.set(3.8, 1.72, 13.2);
-      this.fpYaw = 0.24;
-      this.fpPitch = 0.14;
+      if (prevMode !== 'firstperson') {
+        // Spawn cleanly on exterior plaza facing building lobby & stairwell, or keep valid position
+        if (this.fpPos.lengthSq() < 0.01) {
+          this.fpPos.set(2.8, 0.14, 11.8);
+        }
+        this.fpVelY = 0;
+        this.fpGrounded = true;
+      }
+      const eyeH = this.fpCrouching ? 1.02 : 1.58;
+      this.camera.position.set(this.fpPos.x, this.fpPos.y + eyeH, this.fpPos.z);
+      this.camera.rotation.order = 'YXZ';
+      this.camera.rotation.y = this.fpYaw;
+      this.camera.rotation.x = this.fpPitch;
+    } else if (mode === 'freefly') {
+      this.controls.enabled = false;
+      // Start Free-Fly right from current camera vantage point so user can fly smoothly anywhere!
+      if (prevMode === 'tactical') {
+        this.camera.position.set(2.2, 8.8, 16.5);
+        this.fpYaw = 0.12;
+        this.fpPitch = -0.18;
+      }
+      this.camera.rotation.order = 'YXZ';
+      this.camera.rotation.y = this.fpYaw;
+      this.camera.rotation.x = this.fpPitch;
     }
+  }
+
+  teleportOperatorToFloor(floorIndex = 0) {
+    this.setCameraMode('firstperson');
+    if (floorIndex <= 0) {
+      this.fpPos.set(-1.2, 0.22, 2.2);
+      this.fpYaw = 0.0;
+    } else if (floorIndex === 1) {
+      // Piso 2 right in front of Sniffer RPi 5
+      this.fpPos.set(1.8, 3.42, -1.2);
+      this.fpYaw = 0.72;
+    } else if (floorIndex === 2) {
+      this.fpPos.set(0.6, 6.62, 0.5);
+      this.fpYaw = 0.4;
+    } else if (floorIndex === 3) {
+      this.fpPos.set(0.8, 9.82, 0.4);
+      this.fpYaw = 0.5;
+    } else {
+      this.fpPos.set(0.0, 13.08, 0.5);
+      this.fpYaw = 0.0;
+    }
+    this.fpVelY = 0;
+    this.fpGrounded = true;
+    this.fpPitch = -0.04;
+    this.camera.position.set(this.fpPos.x, this.fpPos.y + 1.58, this.fpPos.z);
   }
 
   onResize() {
@@ -2222,11 +3095,12 @@ export class LPSBoxScene3D {
   }
 
   update(dt) {
-    // 1. Multi-story Structural Modal Sway during Seismic Shaking
-    const gAmp = this.sim.accel.dynamicG;
+    // 1. Multi-story Structural Modal Sway during Seismic Shaking (driven by physical groundAccel!)
+    const ga = this.sim.groundAccel || this.sim.accel;
+    const gAmp = ga.dynamicG;
     if (gAmp > 0.015) {
-      const baseShakeX = this.sim.accel.x * 0.26;
-      const baseShakeZ = this.sim.accel.y * 0.22;
+      const baseShakeX = ga.x * 0.26;
+      const baseShakeZ = ga.y * 0.22;
       for (let f = 0; f < 4; f++) {
         const ampFactor = 0.38 + f * 0.42; // Upper floors whip further horizontally!
         this.floorGroups[f].position.x = baseShakeX * ampFactor;
@@ -2257,11 +3131,12 @@ export class LPSBoxScene3D {
     const flash = Math.floor(this.sim.time * 8) % 2 === 0;
     this.floorAlarmLights.forEach((al, idx) => {
       const collapsed = this.sim.collapsedZones.has(al.zoneId);
-      if (this.sim.scenario === 'major' && alertOn) {
-        const on = (Math.floor(this.sim.time * 9) + idx) % 2 === 0;
-        al.bulb.material.color.setHex(on ? 0xef4444 : 0x450a0a);
+      if ((this.sim.scenario === 'major' || this.sim.scenario === 'catastrophic') && alertOn) {
+        const on = (Math.floor(this.sim.time * 10) + idx) % 2 === 0;
+        const bulbHex = this.sim.scenario === 'catastrophic' ? (on ? 0xe879f9 : 0x7f1d1d) : (on ? 0xef4444 : 0x450a0a);
+        al.bulb.material.color.setHex(bulbHex);
         al.light.color.setHex(collapsed ? 0xf87171 : 0xfef2f2);
-        al.light.intensity = collapsed ? (on ? 0.9 : 0.2) : 0.55;
+        al.light.intensity = collapsed ? (on ? 0.95 : 0.16) : 0.55;
       } else if (this.sim.scenario === 'mild' && this.sim.quakeActive) {
         al.bulb.material.color.setHex(flash ? 0xfbbf24 : 0x451a03);
         al.light.color.setHex(0xfef3c7);
@@ -2273,8 +3148,9 @@ export class LPSBoxScene3D {
       }
     });
 
-    // 2. Update Dynamic Falling/Swaying/Toppling Props + Dust & Sparks
+    // 2. Update Dynamic Falling Props, Breakable Structural Collapse & Particles
     this._updateDynamicProps(dt);
+    this._updateBreakableStructure(dt);
 
     this.dustPool.forEach((d) => {
       if (!d.visible) return;
@@ -2343,32 +3219,159 @@ export class LPSBoxScene3D {
       }
     }
 
-    // 6. Camera Controls (Orbit or First-Person Operator Walk)
+    // 6. Camera Controls: Operator Solid Physics ('firstperson'), Free-Fly 6DOF ('freefly'), or Orbit
     if (!this.renderer.xr.isPresenting) {
       if (this.cameraMode === 'firstperson') {
-        const moveSpeed = 5.4 * dt;
+        const baseSpeed = this.fpCrouching ? 3.1 : this.keys.shift ? 8.1 : 5.2;
         const fwdX = -Math.sin(this.fpYaw);
         const fwdZ = -Math.cos(this.fpYaw);
         const rightX = Math.cos(this.fpYaw);
         const rightZ = -Math.sin(this.fpYaw);
 
-        if (this.keys.w) {
-          this.camera.position.x += fwdX * moveSpeed;
-          this.camera.position.z += fwdZ * moveSpeed;
+        let moveX = 0;
+        let moveZ = 0;
+        if (this.keys.w || this.keys.arrowup) {
+          moveX += fwdX;
+          moveZ += fwdZ;
         }
-        if (this.keys.s) {
-          this.camera.position.x -= fwdX * moveSpeed;
-          this.camera.position.z -= fwdZ * moveSpeed;
+        if (this.keys.s || this.keys.arrowdown) {
+          moveX -= fwdX;
+          moveZ -= fwdZ;
         }
-        if (this.keys.a) {
-          this.camera.position.x -= rightX * moveSpeed;
-          this.camera.position.z -= rightZ * moveSpeed;
+        if (this.keys.a || this.keys.arrowleft) {
+          moveX -= rightX;
+          moveZ -= rightZ;
         }
-        if (this.keys.d) {
-          this.camera.position.x += rightX * moveSpeed;
-          this.camera.position.z += rightZ * moveSpeed;
+        if (this.keys.d || this.keys.arrowright) {
+          moveX += rightX;
+          moveZ += rightZ;
         }
-        this.camera.position.y = 1.72;
+
+        const moveLen = Math.hypot(moveX, moveZ);
+        let velX = 0;
+        let velZ = 0;
+        if (moveLen > 0.001) {
+          velX = (moveX / moveLen) * baseSpeed;
+          velZ = (moveZ / moveLen) * baseSpeed;
+        }
+
+        // Jump when grounded
+        if (this.keys.space && this.fpGrounded) {
+          this.fpVelY = 6.15;
+          this.fpGrounded = false;
+        }
+
+        // Apply gravity
+        this.fpVelY -= 18.5 * dt;
+
+        const targetEye = this.fpCrouching ? 1.02 : 1.58;
+        this._curEyeH = THREE.MathUtils.lerp(this._curEyeH || 1.58, targetEye, Math.min(1, 12 * dt));
+        const headY = this.fpPos.y + this._curEyeH + 0.16;
+
+        // Resolve solid wall, balustrade, furniture & rubble collisions!
+        const nextX = this.fpPos.x + velX * dt;
+        const nextZ = this.fpPos.z + velZ * dt;
+        const col = this._resolveOperatorCollisions(nextX, nextZ, this.fpPos.y, headY);
+        this.fpPos.x = col.x;
+        this.fpPos.z = col.z;
+
+        // Vertical floor / stair / ramp support + ceiling head bump inside floors
+        const prevY = this.fpPos.y;
+        let candidateY = this.fpPos.y + this.fpVelY * dt;
+        const supportY = this._getSupportHeight(this.fpPos.x, this.fpPos.z, this.fpPos.y);
+
+        // Indoor ceiling head bump (floors f = 0..3 have slab bottoms at (f+1)*3.2)
+        if (
+          this.fpVelY > 0 &&
+          this.fpPos.x >= -8.65 &&
+          this.fpPos.x <= 5.52 &&
+          this.fpPos.z >= -4.4 &&
+          this.fpPos.z <= 3.55 &&
+          this.fpPos.y < 12.6
+        ) {
+          const currentFloorIdx = Math.floor((this.fpPos.y + 0.1) / FLOOR_HEIGHT);
+          const ceilingBottom = (currentFloorIdx + 1) * FLOOR_HEIGHT - 0.06;
+          if (candidateY + this._curEyeH + 0.18 > ceilingBottom) {
+            candidateY = ceilingBottom - this._curEyeH - 0.18;
+            this.fpVelY = -0.4;
+          }
+        }
+
+        if (candidateY <= supportY || (this.fpGrounded && this.fpVelY <= 0 && candidateY - supportY < 0.36)) {
+          candidateY = supportY;
+          this.fpVelY = 0;
+          this.fpGrounded = true;
+        } else {
+          this.fpGrounded = false;
+        }
+        this.fpPos.y = candidateY;
+
+        // Push dynamic props around Operator's feet & play footstep cadence
+        if (moveLen > 0.01) {
+          this._pushNearbyDynamicProps(this.fpPos.x, this.fpPos.y, this.fpPos.z, velX, velZ);
+          if (this.fpGrounded) {
+            this._stepAccum = (this._stepAccum || 0) + baseSpeed * dt;
+            if (this._stepAccum >= 1.95) {
+              this._stepAccum = 0;
+              const onStairs = this.fpPos.x > 5.5 && Math.abs(this.fpPos.y - prevY) > 0.004;
+              if (this.cb.onFootstep) this.cb.onFootstep(onStairs);
+            }
+          }
+        }
+
+        // Subtle head-bob + seismic ground tremor felt by Operator!
+        const walkBob = moveLen > 0.01 && this.fpGrounded ? Math.sin(this.sim.time * (this.keys.shift ? 15 : 10.5)) * 0.032 : 0;
+        const quakeJitterX = gAmp > 0.03 ? (Math.random() - 0.5) * Math.min(0.09, gAmp * 0.12) : 0;
+        const quakeJitterY = gAmp > 0.03 ? (Math.random() - 0.5) * Math.min(0.07, gAmp * 0.1) : 0;
+
+        this.camera.position.set(
+          this.fpPos.x + quakeJitterX,
+          this.fpPos.y + this._curEyeH + walkBob + quakeJitterY,
+          this.fpPos.z
+        );
+        this.camera.rotation.order = 'YXZ';
+        this.camera.rotation.y = this.fpYaw;
+        this.camera.rotation.x = this.fpPitch;
+      } else if (this.cameraMode === 'freefly') {
+        // Unrestricted 6-DOF Free-View flight mode ('Vista Libre')
+        const flySpeed = (this.keys.shift ? 19.5 : 8.6) * dt;
+        const cosPitch = Math.cos(this.fpPitch);
+        const dirX = -Math.sin(this.fpYaw) * cosPitch;
+        const dirY = Math.sin(this.fpPitch);
+        const dirZ = -Math.cos(this.fpYaw) * cosPitch;
+        const rightX = Math.cos(this.fpYaw);
+        const rightZ = -Math.sin(this.fpYaw);
+
+        if (this.keys.w || this.keys.arrowup) {
+          this.camera.position.x += dirX * flySpeed;
+          this.camera.position.y += dirY * flySpeed;
+          this.camera.position.z += dirZ * flySpeed;
+        }
+        if (this.keys.s || this.keys.arrowdown) {
+          this.camera.position.x -= dirX * flySpeed;
+          this.camera.position.y -= dirY * flySpeed;
+          this.camera.position.z -= dirZ * flySpeed;
+        }
+        if (this.keys.a || this.keys.arrowleft) {
+          this.camera.position.x -= rightX * flySpeed;
+          this.camera.position.z -= rightZ * flySpeed;
+        }
+        if (this.keys.d || this.keys.arrowright) {
+          this.camera.position.x += rightX * flySpeed;
+          this.camera.position.z += rightZ * flySpeed;
+        }
+        if (this.keys.space) {
+          this.camera.position.y += flySpeed;
+        }
+        if (this.keys.c || this.keys.q) {
+          this.camera.position.y -= flySpeed;
+        }
+
+        // Clamp only to skybox bounds so user can explore everything freely without getting lost
+        this.camera.position.x = Math.max(-42, Math.min(42, this.camera.position.x));
+        this.camera.position.y = Math.max(0.35, Math.min(38, this.camera.position.y));
+        this.camera.position.z = Math.max(-32, Math.min(42, this.camera.position.z));
+
         this.camera.rotation.order = 'YXZ';
         this.camera.rotation.y = this.fpYaw;
         this.camera.rotation.x = this.fpPitch;

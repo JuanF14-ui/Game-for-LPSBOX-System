@@ -11,6 +11,7 @@ const startOverlay = document.getElementById('start-experience-overlay');
 const btnStartExperience = document.getElementById('btn-start-experience');
 const btnStartMild = document.getElementById('btn-start-mild');
 const btnStartMajor = document.getElementById('btn-start-major');
+const btnStartCatastrophic = document.getElementById('btn-start-catastrophic');
 const startStlStatus = document.getElementById('start-stl-status');
 
 const stlBanner = document.getElementById('stl-loading-banner');
@@ -27,12 +28,19 @@ const tickerLog = document.getElementById('ticker-log');
 const tickerClock = document.getElementById('ticker-clock');
 
 const btnAudio = document.getElementById('btn-audio');
+const btnNpcVoices = document.getElementById('btn-npc-voices');
 const btnXr = document.getElementById('btn-xr');
 
 const btnScNormal = document.getElementById('btn-sc-normal');
 const btnScMild = document.getElementById('btn-sc-mild');
 const btnScMajor = document.getElementById('btn-sc-major');
+const btnScCatastrophic = document.getElementById('btn-sc-catastrophic');
 const btnScHit = document.getElementById('btn-sc-hit');
+
+const elOpLocationLabel = document.getElementById('op-location-label');
+const elOpModeBadge = document.getElementById('op-mode-badge');
+const btnOpShove = document.getElementById('btn-op-shove');
+const btnOpFlashlight = document.getElementById('btn-op-flashlight');
 
 const pillChallenge = document.getElementById('pill-challenge');
 const pillSandbox = document.getElementById('pill-sandbox');
@@ -131,8 +139,13 @@ sim = new LPSBoxSimulation({
   onScenarioChange: (sc) => updateScenarioButtonsUI(sc),
   onSnapshotCaptured: (snap) => {
     if (experienceStarted) {
-      sound.startSnifferAlarm(snap.scenario === 'major' ? 'major' : 'mild');
-      if (snap.scenario === 'major') {
+      const alarmSev = snap.scenario === 'catastrophic' ? 'catastrophic' : snap.scenario === 'major' ? 'major' : 'mild';
+      sound.startSnifferAlarm(alarmSev);
+      if (snap.scenario === 'catastrophic') {
+        sound.speakSnifferVoice(
+          'Emergencia crítica siete punto ocho. Conteo pre-sismo transmitido al Gateway del poste exterior antes de posible colapso.'
+        );
+      } else if (snap.scenario === 'major') {
         sound.speakSnifferVoice(
           'Alerta sísmica severa en edificio. Enviando conteo de los cuatro pisos al Gateway del poste exterior. Evacúen por la escalera.'
         );
@@ -144,6 +157,27 @@ sim = new LPSBoxSimulation({
     }
     if (elBtnToggleHolo) elBtnToggleHolo.style.display = 'inline-flex';
     setSeismoMode('event');
+    refreshConsoleData();
+  },
+  onNpcSpeak: (person, text, urgency) => {
+    if (!experienceStarted) return;
+    let dist = 10;
+    if (scene3d?.camera) {
+      const cp = scene3d.camera.position;
+      dist = Math.hypot(cp.x - person.x, cp.y - ((person.y || 0) + 1.4), cp.z - person.z);
+    }
+    sound.speakNpcDialogue(person, text, urgency, dist);
+  },
+  onStructuralCollapseStage: (stage) => {
+    if (experienceStarted) {
+      sound.playStructuralCollapse(0.72 + stage * 0.16);
+    }
+    refreshConsoleData();
+  },
+  onSnifferDamaged: () => {
+    if (experienceStarted) {
+      sound.playSnifferDamage();
+    }
     refreshConsoleData();
   },
   onPacketHeartbeat: () => {
@@ -197,6 +231,24 @@ try {
     onElectricSpark: () => {
       if (experienceStarted) sound.playElectricSpark();
     },
+    onFootstep: (isStair) => {
+      if (experienceStarted) sound.playFootstep(isStair);
+    },
+    onOperatorShove: (pushedCount) => {
+      if (experienceStarted) sound.playShoveImpulse();
+      if (pushedCount > 0) {
+        appendLogEntry({
+          time: sim.time,
+          text: `✋ Operario interactuó físicamente con ${pushedCount} objeto(s) del entorno.`,
+          level: 'info'
+        });
+      }
+    },
+    onFlashlightChange: (on) => {
+      if (btnOpFlashlight) {
+        btnOpFlashlight.textContent = on ? '🔦 Linterna ON [L]' : '🔦 Linterna [L]';
+      }
+    },
     onStlReady: () => {
       if (stlText) {
         stlText.textContent = '✓ Malla ./modelo3d.stl cargada (50,000 tris) + Pantalla calibrada al 100%';
@@ -243,12 +295,16 @@ function startExperience(initialScenario = null) {
   } else if (initialScenario === 'major') {
     setSeismoMode('event');
     sim.triggerSeismicScenario('major');
+  } else if (initialScenario === 'catastrophic') {
+    setSeismoMode('event');
+    sim.triggerSeismicScenario('catastrophic');
   }
 }
 
 btnStartExperience?.addEventListener('click', () => startExperience(null));
 btnStartMild?.addEventListener('click', () => startExperience('mild'));
 btnStartMajor?.addEventListener('click', () => startExperience('major'));
+btnStartCatastrophic?.addEventListener('click', () => startExperience('catastrophic'));
 
 // ================= 3. NAVEGACIÓN DE VISTAS Y POLEA DEL POSTE DE LUZ =================
 function switchView(view) {
@@ -386,6 +442,14 @@ window.addEventListener('keydown', (e) => {
   } else if (k === 'g') {
     sound.ensureContext();
     sim.triggerPhysicalTableHit();
+  } else if (k === 'v' && activeView === 'sim' && scene3d) {
+    const nextMode = scene3d.cameraMode === 'freefly' ? 'tactical' : 'freefly';
+    scene3d.setCameraMode(nextMode);
+    syncCameraButtons(nextMode);
+  } else if (k === 'p' && activeView === 'sim' && scene3d) {
+    const nextMode = scene3d.cameraMode === 'firstperson' ? 'tactical' : 'firstperson';
+    scene3d.setCameraMode(nextMode);
+    syncCameraButtons(nextMode);
   }
 });
 
@@ -399,11 +463,18 @@ document.querySelectorAll('[data-collapse]').forEach((btn) => {
   });
 });
 
-// ================= 5. AUDIO Y SESIÓN WEBXR (VR / MR) =================
+// ================= 5. AUDIO, VOCES NPC Y SESIÓN WEBXR (VR / MR) =================
 btnAudio?.addEventListener('click', () => {
   sound.ensureContext();
   sound.setMuted(!sound.muted);
   btnAudio.textContent = sound.muted ? '🔇 Silenciado' : '🔊 Audio';
+});
+
+btnNpcVoices?.addEventListener('click', () => {
+  sound.ensureContext();
+  const enabled = sound.setNpcVoicesEnabled(!sound.npcVoicesEnabled);
+  btnNpcVoices.textContent = enabled ? '🗣️ Voces NPC' : '🤐 Voces OFF';
+  btnNpcVoices.classList.toggle('voice-off', !enabled);
 });
 
 async function toggleWebXR() {
@@ -453,6 +524,7 @@ function updateScenarioButtonsUI(sc) {
   btnScNormal?.classList.toggle('active', sc === 'normal');
   btnScMild?.classList.toggle('active', sc === 'mild');
   btnScMajor?.classList.toggle('active', sc === 'major');
+  btnScCatastrophic?.classList.toggle('active', sc === 'catastrophic');
 }
 
 btnScNormal?.addEventListener('click', () => {
@@ -473,6 +545,12 @@ btnScMajor?.addEventListener('click', () => {
   sim.triggerSeismicScenario('major');
 });
 
+btnScCatastrophic?.addEventListener('click', () => {
+  sound.ensureContext();
+  setSeismoMode('event');
+  sim.triggerSeismicScenario('catastrophic');
+});
+
 btnScHit?.addEventListener('click', () => {
   sound.ensureContext();
   setSeismoMode('event');
@@ -490,6 +568,13 @@ document.getElementById('btn-console-major')?.addEventListener('click', () => {
   sound.ensureContext();
   setSeismoMode('event');
   sim.triggerSeismicScenario('major');
+  switchView('sim');
+});
+
+document.getElementById('btn-console-catastrophic')?.addEventListener('click', () => {
+  sound.ensureContext();
+  setSeismoMode('event');
+  sim.triggerSeismicScenario('catastrophic');
   switchView('sim');
 });
 
@@ -550,6 +635,30 @@ camButtons.forEach((btn) => {
     const mode = btn.dataset.cam;
     scene3d?.setCameraMode(mode);
     syncCameraButtons(mode);
+  });
+});
+
+btnOpShove?.addEventListener('click', () => {
+  sound.ensureContext();
+  if (scene3d) {
+    if (scene3d.cameraMode !== 'firstperson') {
+      scene3d.setCameraMode('firstperson');
+      syncCameraButtons('firstperson');
+    }
+    scene3d.triggerOperatorShove();
+  }
+});
+
+btnOpFlashlight?.addEventListener('click', () => {
+  scene3d?.toggleFlashlight();
+});
+
+document.querySelectorAll('[data-op-floor]').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    sound.ensureContext();
+    const fl = Number(btn.dataset.opFloor || 0);
+    scene3d?.teleportOperatorToFloor(fl);
+    syncCameraButtons('firstperson');
   });
 });
 
@@ -675,7 +784,7 @@ function drawSeismogram(ctx, w, h, detailed = false) {
       }
     }
 
-    // Collapse marker (major quake)
+    // Collapse marker (major / catastrophic quake)
     if (detailed && eventRec.collapseRelTime !== null) {
       const colX = tToX(eventRec.collapseRelTime);
       ctx.strokeStyle = 'rgba(248, 113, 113, 0.75)';
@@ -685,7 +794,49 @@ function drawSeismogram(ctx, w, h, detailed = false) {
       ctx.stroke();
       ctx.fillStyle = '#fca5a5';
       ctx.font = '10px monospace';
-      ctx.fillText('💥 Caída/Colapso', colX + 4, padTop + 26);
+      ctx.fillText('💥 Colapso Losas', colX + 4, padTop + 26);
+    }
+
+    // Sniffer RPi 5 Buried Under Rubble Marker (Catastrophic Stage 2)
+    if (eventRec.snifferDamagedRelTime !== null && eventRec.snifferDamagedRelTime !== undefined) {
+      const dmgX = tToX(eventRec.snifferDamagedRelTime);
+      ctx.fillStyle = 'rgba(244, 63, 94, 0.10)';
+      ctx.fillRect(dmgX, padTop, Math.max(0, w - dmgX), plotH);
+
+      ctx.strokeStyle = '#fb7185';
+      ctx.lineWidth = 1.6;
+      ctx.setLineDash([3, 3]);
+      ctx.beginPath();
+      ctx.moveTo(dmgX, padTop);
+      ctx.lineTo(dmgX, padTop + plotH);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      if (detailed) {
+        ctx.fillStyle = '#fda4af';
+        ctx.font = 'bold 10.5px monospace';
+        ctx.fillText(
+          `🪨 Sniffer Bajo Escombros (${eventRec.snifferDamagedRelTime.toFixed(1)}s · Señal RPi5 Cortada)`,
+          dmgX + 5,
+          padTop + 40
+        );
+      }
+
+      // Dashed ground motion curve showing the real earthquake continuing while Sniffer sensor is dead!
+      ctx.strokeStyle = 'rgba(232, 121, 249, 0.72)';
+      ctx.lineWidth = detailed ? 1.4 : 1.1;
+      ctx.setLineDash([4, 3]);
+      ctx.beginPath();
+      samples.forEach((pt, idx) => {
+        const gVal = pt.groundG !== undefined ? pt.groundG : pt.accelG;
+        const x = tToX(pt.tRel);
+        const normG = Math.min(1, gVal / maxScaleG);
+        const y = padTop + plotH * (1 - normG);
+        if (idx === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.stroke();
+      ctx.setLineDash([]);
     }
 
     // Filled acceleration envelope + crisp stroke (Cyan)
@@ -766,8 +917,11 @@ function drawSeismogram(ctx, w, h, detailed = false) {
         ctx.stroke();
 
         if (elSeismoHoverReadout) {
+          const offlineNote = nearest.snifferOffline
+            ? ` · <strong style="color:#fb7185">SNIFFER SEPULTADO (Suelo real: ${(nearest.groundG || 0).toFixed(3)} g)</strong>`
+            : '';
           elSeismoHoverReadout.innerHTML =
-            `Cursor en <strong>t = ${nearest.tRel >= 0 ? '+' : ''}${nearest.tRel.toFixed(2)} s</strong> · Aceleración MPU6050: <strong style="color:#38bdf8">${nearest.accelG.toFixed(3)} g</strong> · STA/LTA: <strong style="color:#fbbf24">${nearest.ratio.toFixed(2)}</strong> ${nearest.triggered ? '<span style="color:#f87171">(≥ 3.0 DISPARADO)</span>' : ''}`;
+            `Cursor en <strong>t = ${nearest.tRel >= 0 ? '+' : ''}${nearest.tRel.toFixed(2)} s</strong> · Aceleración RPi5: <strong style="color:#38bdf8">${nearest.accelG.toFixed(3)} g</strong> · STA/LTA: <strong style="color:#fbbf24">${nearest.ratio.toFixed(2)}</strong> ${nearest.triggered ? '<span style="color:#f87171">(≥ 3.0 DISPARADO)</span>' : ''}${offlineNote}`;
         }
       }
     }
@@ -849,9 +1003,43 @@ function updateHudTelemetry() {
   if (s3) s3.className = `mission-step ${hasLoweredAndExtracted ? 'done' : hasSnapshot ? 'current' : ''}`;
   if (s4) s4.className = `mission-step ${hasReported ? 'done' : hasLoweredAndExtracted ? 'current' : ''}`;
 
-  if (elOledSta) elOledSta.textContent = `STA/LTA: ${sim.staLtaRatio.toFixed(2)}`;
+  // Live Operator Physics & Free-Fly HUD status
+  if (scene3d && (elOpLocationLabel || elOpModeBadge)) {
+    const op = scene3d.getOperatorStatus();
+    if (elOpLocationLabel) {
+      elOpLocationLabel.textContent = `📍 ${op.location}`;
+    }
+    if (elOpModeBadge) {
+      elOpModeBadge.classList.toggle('freefly', op.mode === 'freefly');
+      if (op.mode === 'firstperson') {
+        elOpModeBadge.textContent = op.crouching
+          ? 'Agachado · Físicas ON'
+          : !op.grounded
+            ? 'Saltando · Físicas ON'
+            : 'Colisiones ON';
+      } else if (op.mode === 'freefly') {
+        elOpModeBadge.textContent = 'Vuelo Libre 360°';
+      } else {
+        elOpModeBadge.textContent = 'Órbita 3D';
+      }
+    }
+  }
+
+  if (elOledSta) {
+    elOledSta.textContent = sim.snifferDamaged
+      ? 'OFFLINE (ESCOMBROS)'
+      : `STA/LTA: ${sim.staLtaRatio.toFixed(2)}`;
+  }
   if (elOledBox && elOledTitle && elOledSub) {
-    if (sim.scenario === 'major' && hasEventStarted) {
+    if (sim.snifferDamaged) {
+      elOledBox.className = 'sniffer-oled state-damaged';
+      elOledTitle.textContent = '⚠ DAÑO CRÍTICO';
+      elOledSub.textContent = 'RPi5 bajo escombros · t₀ salvado en Poste';
+    } else if (sim.scenario === 'catastrophic' && hasEventStarted) {
+      elOledBox.className = 'sniffer-oled state-catastrophic';
+      elOledTitle.textContent = 'COLAPSO 7.8 Mw';
+      elOledSub.textContent = 'TX urgente t₀ → Poste Exterior';
+    } else if (sim.scenario === 'major' && hasEventStarted) {
       elOledBox.className = 'sniffer-oled state-major';
       elOledTitle.textContent = 'ALERTA SÍSMICA';
       elOledSub.textContent = 'RPi5 enviando t₀ → Poste Exterior';
@@ -866,7 +1054,11 @@ function updateHudTelemetry() {
     }
   }
 
-  if (elStatAccel) elStatAccel.textContent = `${sim.accel.dynamicG.toFixed(3)}g`;
+  if (elStatAccel) {
+    elStatAccel.textContent = sim.snifferDamaged
+      ? 'SIN SEÑAL (0.000g)'
+      : `${sim.accel.dynamicG.toFixed(3)}g`;
+  }
   if (elStatStaLta) {
     elStatStaLta.textContent = sim.staLtaRatio.toFixed(2);
     elStatStaLta.classList.toggle('triggered', sim.staLtaRatio >= sim.staLtaThreshold);
@@ -985,15 +1177,31 @@ function drawTacticalRssiMap(packets) {
       r.y + 18
     );
 
-    // Sniffer RPi5 icon on Piso 2
+    // Sniffer RPi5 icon on Piso 2 (shows rubble burial state in Catastrophic scenario!)
     if (zone.floor === 2) {
       const sx = r.x + r.w * 0.54;
       const sy = r.y + r.h * 0.56;
-      rssiCtx.fillStyle = '#38bdf8';
-      rssiCtx.fillRect(sx - 8, sy - 8, 16, 16);
-      rssiCtx.fillStyle = '#e0f2fe';
-      rssiCtx.font = '10.5px monospace';
-      rssiCtx.fillText('SNIFFER RPi5+MPU6050', sx + 12, sy + 4);
+      if (sim.snifferDamaged) {
+        rssiCtx.fillStyle = '#fb7185';
+        rssiCtx.fillRect(sx - 9, sy - 9, 18, 18);
+        // Rubble mound polygon over Sniffer
+        rssiCtx.fillStyle = 'rgba(100, 116, 139, 0.88)';
+        rssiCtx.beginPath();
+        rssiCtx.moveTo(sx - 18, sy + 11);
+        rssiCtx.lineTo(sx - 4, sy - 13);
+        rssiCtx.lineTo(sx + 16, sy + 11);
+        rssiCtx.closePath();
+        rssiCtx.fill();
+        rssiCtx.fillStyle = '#fda4af';
+        rssiCtx.font = 'bold 10.5px monospace';
+        rssiCtx.fillText('⚠ SNIFFER BAJO ESCOMBROS (t₀ EN POSTE)', sx + 20, sy + 4);
+      } else {
+        rssiCtx.fillStyle = '#38bdf8';
+        rssiCtx.fillRect(sx - 8, sy - 8, 16, 16);
+        rssiCtx.fillStyle = '#e0f2fe';
+        rssiCtx.font = '10.5px monospace';
+        rssiCtx.fillText('SNIFFER RPi5+MPU6050', sx + 12, sy + 4);
+      }
     }
   });
 
@@ -1088,10 +1296,13 @@ function refreshConsoleData() {
 
   if (snap && banner && bannerText) {
     banner.classList.remove('no-event');
+    const snifferNote = sim.snifferDamaged
+      ? ' · <strong style="color:#fda4af;">⚠ Sniffer RPi5 (Piso 2) SEPULTADO BAJO ESCOMBROS — Caja negra t₀ preservada intacta en este Gateway exterior</strong>'
+      : '';
     bannerText.innerHTML =
       `<strong>🟡 LED Amarillo Activo — Snapshot Pre-Sismo (<code>t₀ = ${snap.triggerTime.toFixed(1)}s</code>) recibido desde Sniffer RPi5:</strong> ` +
       `Magnitud <strong>${snap.magnitude.toFixed(1)} Mw</strong> · Disparo <code>STA/LTA = ${snap.triggerStaLta.toFixed(2)}</code> · ` +
-      `Estado en Poste: <strong>${sim.canExtractGateway() ? 'Abajo (1.18 m — Conectado USB-C)' : 'Arriba en Poste (4.65 m — Bájalo para validar extracción)'}</strong>.`;
+      `Estado en Poste: <strong>${sim.canExtractGateway() ? 'Abajo (1.18 m — Conectado USB-C)' : 'Arriba en Poste (4.65 m — Bájalo para validar extracción)'}</strong>${snifferNote}.`;
   } else if (banner && bannerText) {
     banner.classList.add('no-event');
     bannerText.innerHTML =
@@ -1186,11 +1397,16 @@ function refreshConsoleData() {
     const eventRec = sim.getEventSeismogram();
     const payloadExample = {
       sniffer_node: 'LPSBOX-SNIFFER-RPI5-PISO2',
+      sniffer_hardware_status: sim.snifferDamaged
+        ? 'DAMAGED_BURIED_UNDER_RUBBLE_POST_T0'
+        : 'ONLINE_MONITORING',
+      structural_collapse_stage: sim.structuralCollapseStage || 0,
       outdoor_gateway: {
         id: 'LPSBOX-GW-POSTE-EXT-01',
         pole_height_m: Number(sim.gatewayHeight.toFixed(2)),
         pole_state: sim.gatewayPoleState,
-        leds: sim.gatewayLeds
+        leds: sim.gatewayLeds,
+        blackbox_t0_preserved: Boolean(snap)
       },
       timestamp_s: Number((snap ? snap.triggerTime : sim.time).toFixed(2)),
       mpu6050_rpi5: {
@@ -1370,7 +1586,8 @@ function stepFrame(now) {
 
   sim.update(dt);
   if (experienceStarted) {
-    sound.updateSeismicRumble(sim.accel.dynamicG);
+    const physG = (sim.groundAccel || sim.accel).dynamicG;
+    sound.updateSeismicRumble(physG);
   }
 
   if (scene3d) {

@@ -1567,3 +1567,126 @@ input[type="range"] {
   flex-wrap: wrap;
 }
 
+/* ================= V3: CATASTROPHIC SCENARIO, BURIED SNIFFER, FREE-FLY & OPERATOR PHYSICS ================= */
+.scenario-btn.sc-catastrophic {
+  grid-column: 1 / -1;
+  border-color: rgba(192, 132, 252, 0.42);
+  background: linear-gradient(135deg, rgba(59, 7, 100, 0.42), rgba(69, 10, 10, 0.45));
+}
+
+.scenario-btn.sc-catastrophic:hover {
+  border-color: #e879f9;
+  background: linear-gradient(135deg, rgba(88, 28, 135, 0.52), rgba(127, 29, 29, 0.52));
+}
+
+.scenario-btn.active.sc-catastrophic {
+  border-color: #e879f9;
+  background: linear-gradient(135deg, rgba(107, 33, 168, 0.55), rgba(153, 27, 27, 0.55));
+  box-shadow: 0 0 18px rgba(217, 70, 239, 0.38);
+}
+
+.btn-catastrophic {
+  background: linear-gradient(135deg, #7e22ce, #be123c);
+  border-color: #e879f9;
+  color: #fff;
+}
+.btn-catastrophic:hover {
+  filter: brightness(1.12);
+  border-color: #f5d0fe;
+}
+
+.cam-btn.cam-freefly {
+  grid-column: 1 / -1;
+  border-color: rgba(168, 85, 247, 0.45);
+  background: rgba(46, 16, 101, 0.42);
+  color: #e9d5ff;
+  text-align: center;
+}
+.cam-btn.cam-freefly.active {
+  background: linear-gradient(90deg, rgba(126, 34, 206, 0.55), rgba(2, 132, 199, 0.48));
+  border-color: #e879f9;
+  color: #fff;
+  box-shadow: 0 0 14px rgba(192, 132, 252, 0.35);
+}
+
+.operator-physics-box {
+  margin-top: 8px;
+  padding: 7px 9px;
+  background: rgba(7, 13, 25, 0.72);
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  border-radius: 7px;
+  font-size: 11px;
+}
+
+.operator-loc-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  margin-bottom: 5px;
+  color: #e0f2fe;
+}
+
+.operator-badge {
+  font-size: 9.5px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(16, 185, 129, 0.2);
+  border: 1px solid rgba(16, 185, 129, 0.5);
+  color: #6ee7b7;
+}
+.operator-badge.freefly {
+  background: rgba(168, 85, 247, 0.25);
+  border-color: rgba(216, 180, 254, 0.6);
+  color: #f3e8ff;
+}
+
+.floor-jump-row {
+  display: flex;
+  gap: 4px;
+  margin-top: 5px;
+}
+.floor-jump-btn {
+  flex: 1;
+  appearance: none;
+  background: rgba(30, 41, 59, 0.75);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  padding: 3px 4px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.floor-jump-btn:hover {
+  color: #fff;
+  border-color: var(--cyan);
+}
+
+.sniffer-oled.state-catastrophic {
+  border-color: #e879f9;
+  color: #fae8ff;
+  background: #240524;
+  animation: oledFlash 0.45s infinite alternate;
+}
+
+.sniffer-oled.state-damaged {
+  border-color: #fb7185;
+  color: #ffe4e6;
+  background: repeating-linear-gradient(
+    -24deg,
+    #140409,
+    #140409 8px,
+    #250711 8px,
+    #250711 12px
+  );
+  box-shadow: inset 0 0 18px rgba(244, 63, 94, 0.45);
+}
+
+.icon-btn.voice-off {
+  opacity: 0.68;
+  border-color: rgba(248, 113, 113, 0.4);
+}
+
+
