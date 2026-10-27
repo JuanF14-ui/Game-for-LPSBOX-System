@@ -1,8 +1,9 @@
-// js/simulation.js — Motor IoT LPSBOX v2:
-// - Edificio de 4 Pisos (P1..P4) con escalera de emergencia multinivel
-// - Sniffer en interior sobre Raspberry Pi 5 + MPU6050 (STA/LTA) + WiFi/BLE Probe Requests (10s)
-// - Gateway exterior sin pantalla montado en Poste de Luz (con mecánica de descenso para extracción USB-C)
-// - Grabadora persistente del sismograma completo del evento (pre-evento, Onda P, Onda S, réplica y coda)
+// js/simulation.js — Motor IoT LPSBOX v3:
+// - Edificio de 4 Pisos (P1..P4) con escalera de emergencia en U transitable
+// - Escenarios: Monitoreo Base, Sismo Pequeño (4.2 Mw), Terremoto Fuerte (6.9 Mw),
+//   Terremoto Catastrófico (7.8 Mw con colapso estructural por etapas y Sniffer sepultado bajo escombros) y Golpe MPU6050
+// - Sniffer en interior sobre Raspberry Pi 5 + MPU6050 (STA/LTA) -> transmite t0 al Gateway exterior en Poste de Luz
+// - Voces habladas y diálogos reactivos para NPCs + Grabadora persistente del sismograma completo
 
 export const FLOOR_HEIGHT = 3.2;
 
@@ -15,11 +16,11 @@ export const ZONES = [
     name: 'Piso 1 — Lobby y Cafetería',
     shortName: 'Piso 1 · Cafetería',
     color: '#10b981',
-    bounds: { xMin: -8.4, xMax: 5.4, zMin: -4.1, zMax: 3.3 },
+    bounds: { xMin: -8.3, xMax: 5.2, zMin: -4.0, zMax: 3.2 },
     sensorPos: { x: -1.5, y: 2.6, z: -0.4 },
     coverSpots: [
-      { x: -6.2, z: -2.2 }, { x: -2.0, z: -2.2 },
-      { x: 2.4, z: -1.8 }, { x: -4.8, z: 1.5 }, { x: 1.8, z: 1.6 }
+      { x: -6.2, z: -1.8 }, { x: -2.0, z: -2.0 },
+      { x: 2.4, z: -1.8 }, { x: -4.6, z: 1.5 }, { x: 1.8, z: 1.6 }
     ]
   },
   {
@@ -30,11 +31,11 @@ export const ZONES = [
     name: 'Piso 2 — Lab. Electrónica y Sniffer RPi5',
     shortName: 'Piso 2 · Lab / RPi5',
     color: '#38bdf8',
-    bounds: { xMin: -8.4, xMax: 5.4, zMin: -4.1, zMax: 3.3 },
+    bounds: { xMin: -8.3, xMax: 5.2, zMin: -4.0, zMax: 3.2 },
     sensorPos: { x: -0.8, y: FLOOR_HEIGHT + 1.35, z: -3.5 },
     coverSpots: [
-      { x: -6.4, z: -2.0 }, { x: -2.2, z: -1.6 },
-      { x: 2.6, z: -2.0 }, { x: -5.2, z: 1.4 }, { x: 2.2, z: 1.4 }
+      { x: -6.0, z: 1.4 }, { x: -3.2, z: -1.4 },
+      { x: 2.6, z: -1.8 }, { x: 2.4, z: 1.4 }, { x: -5.2, z: -1.6 }
     ]
   },
   {
@@ -45,11 +46,11 @@ export const ZONES = [
     name: 'Piso 3 — Sala de Servidores y Telecom',
     shortName: 'Piso 3 · Servidores',
     color: '#a855f7',
-    bounds: { xMin: -8.4, xMax: 5.4, zMin: -4.1, zMax: 3.3 },
+    bounds: { xMin: -8.3, xMax: 5.2, zMin: -4.0, zMax: 3.2 },
     sensorPos: { x: -1.2, y: FLOOR_HEIGHT * 2 + 2.6, z: -0.4 },
     coverSpots: [
-      { x: -6.0, z: -2.3 }, { x: -1.8, z: -2.3 },
-      { x: 2.5, z: -2.1 }, { x: -4.5, z: 1.5 }, { x: 2.0, z: 1.5 }
+      { x: -5.8, z: 1.4 }, { x: -1.8, z: -2.1 },
+      { x: 2.5, z: -2.0 }, { x: 2.2, z: 1.5 }, { x: -3.8, z: 1.5 }
     ]
   },
   {
@@ -60,21 +61,21 @@ export const ZONES = [
     name: 'Piso 4 — Auditorio y Sala de Proyectos',
     shortName: 'Piso 4 · Auditorio',
     color: '#f59e0b',
-    bounds: { xMin: -8.4, xMax: 5.4, zMin: -4.1, zMax: 3.3 },
+    bounds: { xMin: -8.3, xMax: 5.2, zMin: -4.0, zMax: 3.2 },
     sensorPos: { x: -1.5, y: FLOOR_HEIGHT * 3 + 2.6, z: -0.4 },
     coverSpots: [
-      { x: -6.4, z: -2.1 }, { x: -2.4, z: -2.1 },
-      { x: 2.2, z: -2.1 }, { x: -5.0, z: 1.6 }, { x: 1.8, z: 1.6 }
+      { x: -3.8, z: 1.4 }, { x: -1.2, z: -2.0 },
+      { x: 2.2, z: -2.0 }, { x: 1.8, z: 1.5 }, { x: -1.2, z: 1.4 }
     ]
   }
 ];
 
 export const ASSEMBLY_POINT = { x: -7.4, z: 9.4, radius: 3.0 };
 
-// Sniffer (Raspberry Pi 5 + MPU6050 + WiFi/BLE) montado en columna estructural central del Piso 2
+// Sniffer (Raspberry Pi 5 + MPU6050 + WiFi/BLE) en columna central del Piso 2
 export const SNIFFER_WORLD_POS = { x: -0.8, y: FLOOR_HEIGHT + 1.15, z: -3.55 };
 
-// Gateway sin pantalla montado afuera en un Poste de Luz (a 4.65m de altura; baja a 1.18m para el operario)
+// Gateway sin pantalla montado afuera en el Poste de Luz (4.65m arriba -> 1.18m abajo)
 export const POLE_WORLD_POS = { x: 7.5, y: 0.0, z: 9.2 };
 export const GATEWAY_HEIGHT_UP = 4.65;
 export const GATEWAY_HEIGHT_DOWN = 1.18;
@@ -91,81 +92,90 @@ const VENDOR_OUIS = [
 
 const NORMAL_PHRASES_BY_FLOOR = {
   A: [
-    'El café del Piso 1 quedó genial ☕',
-    'Esperando reunión en el lobby',
-    'Conectado al WiFi del edificio',
-    'Revisando mensajes en cafetería',
-    'Todo tranquilo en planta baja'
+    'El café del primer piso quedó muy bueno',
+    'Esperando la reunión aquí en el lobby',
+    'Conectado a la red inalámbrica del edificio',
+    'Revisando correos en la cafetería',
+    'Todo muy tranquilo en planta baja'
   ],
   B: [
-    'Calibrando el Sniffer en la RPi5',
-    'Midiendo ruido base del MPU6050',
-    'Probando antenas en el Piso 2',
-    'Compilando script Python MQTT',
-    'Osciloscopio estable en laboratorio'
+    'Calibrando el Sniffer en la Raspberry Pi cinco',
+    'Midiendo el ruido base del sensor sísmico',
+    'Probando antenas aquí en el segundo piso',
+    'Compilando el puente Python de telemetría',
+    'Osciloscopio estable en el laboratorio'
   ],
   C: [
-    'Racks del Piso 3 a 21 °C',
-    'Verificando respaldo UPS',
-    'Latencia de red en 2 ms',
-    'Haciendo backup en servidores',
-    'Revisando switches de fibra'
+    'Los servidores del tercer piso están a veintiún grados',
+    'Verificando las baterías de respaldo',
+    'Latencia de red estable en dos milisegundos',
+    'Haciendo copia de seguridad en los racks',
+    'Revisando enlaces de fibra óptica'
   ],
   D: [
-    'Preparando diapositivas en Piso 4',
-    'Qué buena vista desde el cuarto piso',
-    'Revisando audio del auditorio',
+    'Preparando la presentación en el cuarto piso',
+    'Qué buena vista desde el auditorio superior',
+    'Probando el sonido del auditorio',
     'En sesión de diseño de proyectos',
-    'Tomando notas desde el celular'
+    'Tomando apuntes desde el celular'
   ]
 };
 
 const MILD_PHRASES = [
   '¿Sintieron eso? ¡Está temblando suave!',
-  'Tranquilos, es un sismo pequeño...',
-  'Miren cómo se mueven las lámparas',
+  'Tranquilos todos, es un sismo pequeño',
+  'Miren cómo se mueven las lámparas del techo',
   'Aléjense de los estantes por precaución',
   'Mantengan la calma, no corran',
-  'Me resguardo junto al escritorio un momento',
+  'Resguardémonos junto al escritorio un momento',
   'Bajemos con calma por la escalera',
-  'Solo es un temblor leve, respiren'
+  'Solo es un temblor leve, respiren tranquilos'
 ];
 
 const MILD_AFTER_PHRASES = [
-  'Uf, ya pasó... fue solo un susto',
+  'Ya pasó el temblor, fue solo un susto',
   'Todo bien por aquí tras el sismo leve',
-  'El Sniffer RPi5 registró toda la onda',
-  'Revisemos que no haya caído nada'
+  'La Raspberry Pi cinco registró toda la onda',
+  'Revisemos que todo esté en orden'
 ];
 
 const MAJOR_COVER_PHRASES = [
-  '¡¡TERREMOTO!! ¡Cúbranse la cabeza!',
-  '¡Bajo las mesas rápido, tiembla muy fuerte!',
+  '¡Terremoto! ¡Cúbranse la cabeza ahora!',
+  '¡Bajo las mesas rápido, sacude muy fuerte!',
   '¡Cuidado, se están cayendo los estantes!',
-  '¡Agárrense de las columnas!',
-  '¡Se caen las lámparas del techo!'
+  '¡Agárrense firme de las columnas!',
+  '¡Se desprenden las lámparas del techo!'
+];
+
+const CATASTROPHIC_COVER_PHRASES = [
+  '¡Terremoto destructivo! ¡Se está partiendo el techo!',
+  '¡A los triángulos de vida junto a las columnas!',
+  '¡Cuidado, está colapsando el ala oeste!',
+  '¡Se caen las vigas del edificio, cúbranse!',
+  '¡Dios mío, está cediendo la losa superior!'
 ];
 
 const MAJOR_EVAC_PHRASES = [
-  '¡Rápido por la escalera de emergencia!',
-  '¡No usen ascensor, bajen al Piso 1!',
-  '¡Cuidado con los vidrios y escombros!',
-  '¡Salgan hacia el punto de encuentro!',
-  '¡Sigan bajando, ya casi llegamos a calle!'
+  '¡Rápido, salgan por la escalera de emergencia!',
+  '¡Bajen hacia el primer piso con cuidado!',
+  '¡Cuidado con los vidrios y los escombros!',
+  '¡Todos hacia el punto de encuentro exterior!',
+  '¡Sigan bajando, ya casi salimos a la calle!'
 ];
 
 const TRAPPED_PHRASES = [
-  '¡Ayuda aquí arriba, cayó un estante en la puerta!',
-  '¡Estamos atrapados, no podemos pasar a la escalera!',
-  '¡Auxilio! ¡Mi celular casi no tiene señal!',
-  '¡Aquí en el piso superior, escúchennos!'
+  '¡Auxilio! ¡Cayó una losa y estamos atrapados aquí arriba!',
+  '¡Ayuda por favor, las vigas bloquearon la salida!',
+  '¡Socorro! ¡Estamos vivos bajo los escombros, escúchennos!',
+  '¡Aquí en el edificio, no podemos mover el concreto!',
+  '¡Rescate por favor, quedamos encerrados en este piso!'
 ];
 
 const SAFE_PHRASES = [
-  '¡Salimos a salvo! ¿Quedó alguien arriba?',
-  '¡Operario, baja el Gateway del poste de luz!',
-  '¡Revisen cuántos celulares había en cada piso!',
-  '¡Estamos bien en el punto de encuentro!'
+  '¡Logramos salir! ¿Quedó gente atrapada adentro?',
+  '¡Operario, baja el Gateway del poste para ver quién falta!',
+  '¡Revisen cuántos celulares había en cada piso antes del colapso!',
+  '¡Estamos a salvo en el punto de encuentro!'
 ];
 
 const SKIN_TONES = ['#f5d0b5', '#eab68c', '#d69464', '#b87648', '#8d5531', '#f9dcc4'];
@@ -205,7 +215,8 @@ export class LPSBoxSimulation {
     this.customMagnitude = 6.9;
 
     // Active seismic state
-    this.scenario = 'normal'; // 'normal' | 'mild' | 'major' | 'custom'
+    // 'normal' | 'mild' | 'major' | 'catastrophic'
+    this.scenario = 'normal';
     this.quakeActive = false;
     this.quakeElapsed = 0;
     this.quakeDuration = 0;
@@ -213,17 +224,22 @@ export class LPSBoxSimulation {
     this.collapseOccurred = false;
     this.collapsedZones = new Set();
 
+    // Catastrophic structural collapse & Sniffer RPi5 burial state
+    this.structuralCollapseStage = 0; // 0 = intact, 1 = west slabs, 2 = central beam crushes Sniffer, 3 = stair/parapet rubble
+    this.snifferDamaged = false;
+    this.snifferDamageTime = null;
+
     // Outdoor Street Light Pole Gateway mechanic
-    // 'up' (at 4.65m on pole) | 'lowering' | 'down' (at 1.18m accessible to operator) | 'raising'
     this.gatewayPoleState = 'up';
     this.gatewayHeight = GATEWAY_HEIGHT_UP;
 
-    // Physical table / sensor impact state (Mechanic 2)
+    // Physical table / sensor impact state
     this.tableShockTimer = 0;
     this.shockwaves = [];
 
-    // MPU6050 + STA/LTA state on Sniffer RPi5
+    // Ground seismic motion vs MPU6050 reading (MPU6050 drops to 0 if Sniffer is crushed under rubble!)
     const baseEnergy = 3.2e-5;
+    this.groundAccel = { x: 0, y: 0, z: 1.0, dynamicG: 0.004 };
     this.accel = { x: 0, y: 0, z: 1.0, dynamicG: 0.004 };
     this.sta = baseEnergy;
     this.lta = baseEnergy;
@@ -233,10 +249,17 @@ export class LPSBoxSimulation {
     // Live rolling seismogram buffer (~10s)
     this.seismoHistory = [];
     for (let i = 0; i < 220; i++) {
-      this.seismoHistory.push({ t: -3.5 + i * 0.016, accelG: 0.004, ratio: 1.0, triggered: false });
+      this.seismoHistory.push({
+        t: -3.5 + i * 0.016,
+        accelG: 0.004,
+        groundG: 0.004,
+        ratio: 1.0,
+        triggered: false,
+        snifferOffline: false
+      });
     }
 
-    // Persistent Full-Event Seismogram Recorder (retains entire mild/major/impact wave after it ends!)
+    // Persistent Full-Event Seismogram Recorder
     this.currentEventRecord = null;
     this.completedEventRecord = null;
     this._eventSampleAccum = 0;
@@ -246,7 +269,7 @@ export class LPSBoxSimulation {
     this.rollingProbes = [];
     this.batchSyncTimer = 0;
 
-    // Gateway 3 Physical LEDs (Mechanic 3)
+    // Gateway 3 Physical LEDs (Outdoor Pole)
     this.gatewayLeds = {
       blue: true,
       blink: false,
@@ -260,13 +283,13 @@ export class LPSBoxSimulation {
     this.dataExtractedByOperator = false;
     this.reportSubmitted = false;
     this.showPreQuakeHologram = false;
-    this.userMapPins = []; // { x, yFloor, z, zone }
+    this.userMapPins = [];
 
     this.externalHardwareConnected = false;
 
     this.people = [];
     this.rfPulses = [];
-    this._speechCycleTimer = 0;
+    this._speechCycleTimer = 1.6;
 
     this.spawnMissionRandom(true);
   }
@@ -312,7 +335,6 @@ export class LPSBoxSimulation {
 
   // ================= EVENT SEISMOGRAM RECORDER =================
   _startEventRecording(label, scenarioType, magnitude) {
-    // Seed with the last ~2.4s of calm pre-event history so onset contrast is clearly visible
     const tail = this.seismoHistory.slice(-90);
     const tStart = this.time;
     const preSamples = [];
@@ -321,8 +343,10 @@ export class LPSBoxSimulation {
       preSamples.push({
         tRel: Math.max(-2.6, pt.t - tStart),
         accelG: pt.accelG,
+        groundG: pt.groundG ?? pt.accelG,
         ratio: pt.ratio,
-        triggered: pt.triggered
+        triggered: pt.triggered,
+        snifferOffline: false
       });
     }
 
@@ -335,6 +359,7 @@ export class LPSBoxSimulation {
       expectedDuration: this.quakeDuration || 3.5,
       triggerRelTime: null,
       collapseRelTime: null,
+      snifferDamagedRelTime: null,
       peakG: 0.005,
       peakRelTime: 0,
       peakStaLta: 1.0,
@@ -392,20 +417,20 @@ export class LPSBoxSimulation {
           waitTimer: randRange(0.4, 3.2),
           probeTimer: randRange(0.2, 2.4),
           randomBurstTimer: randRange(1.0, 4.2),
-          state: 'working', // 'working' | 'mild_react' | 'crouching' | 'duck_cover' | 'evacuating_calm' | 'evacuating_panic' | 'evacuated' | 'trapped'
-          pose: 'stand',    // 'stand' | 'look_up' | 'crouch' | 'cover_head' | 'run' | 'wave_help'
-          reactionDelay: randRange(0.35, 1.35),
+          state: 'working',
+          pose: 'stand',
+          reactionDelay: randRange(0.3, 1.25),
           coverHoldTimer: 0,
           willEvacuateMild: idCounter % 3 === 0,
           phoneOnline: true,
           phrase: phrases[idCounter % phrases.length],
           speechVisible: idCounter <= 4,
-          speechUrgency: 'normal', // 'normal' | 'mild' | 'major' | 'trapped' | 'safe'
+          speechUrgency: 'normal',
           speechTimer: randRange(1.2, 4.5),
           color: outfitPalette[idCounter % outfitPalette.length],
           pantsColor: pantsPalette[idCounter % pantsPalette.length],
           skinColor: SKIN_TONES[idCounter % SKIN_TONES.length],
-          hairStyle: idCounter % 4, // 0: short, 1: ponytail/long, 2: safety helmet, 3: cap/curly
+          hairStyle: idCounter % 4,
           hasLabCoat: zone.id === 'B' && idCounter % 2 === 0,
           walkPhase: Math.random() * Math.PI * 2,
           preQuakePos: { x, y, z, zone: zone.id, floor: zone.floor }
@@ -430,19 +455,18 @@ export class LPSBoxSimulation {
   }
 
   spawnMissionRandom(silent = false) {
-    // 4-story distribution (total ~13..26 people across Pisos 1–4)
     const counts = {
-      A: Math.floor(randRange(3, 7)), // Piso 1
-      B: Math.floor(randRange(2, 6)), // Piso 2
-      C: Math.floor(randRange(2, 6)), // Piso 3
-      D: Math.floor(randRange(3, 8))  // Piso 4
+      A: Math.floor(randRange(3, 7)),
+      B: Math.floor(randRange(3, 6)),
+      C: Math.floor(randRange(3, 6)),
+      D: Math.floor(randRange(3, 8))
     };
     this.resetEnvironmentState(true);
     this.spawnPopulation(counts);
     if (!silent) {
       this.logEvent(
         this.challengeMode
-          ? 'Nueva misión en Edificio de 4 Pisos: conteo real oculto. Dispara un sismo, baja el Gateway del poste y extrae los datos.'
+          ? 'Nueva misión en Edificio de 4 Pisos: conteo oculto. Dispara un escenario sísmico, explora o baja el Gateway del poste.'
           : `Edificio reiniciado con ${this.people.length} personas distribuidas en los Pisos 1 a 4.`,
         'info'
       );
@@ -451,7 +475,7 @@ export class LPSBoxSimulation {
 
   spawnWithTotalCount(total) {
     const clamped = Math.max(4, Math.min(36, Math.round(total)));
-    const weights = [0.26, 0.22, 0.22, 0.30];
+    const weights = [0.25, 0.23, 0.22, 0.3];
     const counts = { A: 0, B: 0, C: 0, D: 0 };
     const keys = ['A', 'B', 'C', 'D'];
     let assigned = 0;
@@ -475,6 +499,9 @@ export class LPSBoxSimulation {
     this.quakeMagnitude = 0;
     this.collapseOccurred = false;
     this.collapsedZones.clear();
+    this.structuralCollapseStage = 0;
+    this.snifferDamaged = false;
+    this.snifferDamageTime = null;
     this.frozenSnapshot = null;
     this.dataExtractedByOperator = false;
     this.reportSubmitted = false;
@@ -500,6 +527,9 @@ export class LPSBoxSimulation {
     this.quakeMagnitude = 0;
     this.collapseOccurred = false;
     this.collapsedZones.clear();
+    this.structuralCollapseStage = 0;
+    this.snifferDamaged = false;
+    this.snifferDamageTime = null;
     this.frozenSnapshot = null;
     this.dataExtractedByOperator = false;
     this.reportSubmitted = false;
@@ -531,24 +561,30 @@ export class LPSBoxSimulation {
     this._seedInitialProbes();
     if (this.cb.onPropsReset) this.cb.onPropsReset();
     this.logEvent(
-      'Modo Monitoreo Normal activo en los 4 pisos. Sniffer (RPi5) escaneando y Gateway en poste con LED Azul.',
+      'Modo Monitoreo Normal restaurado: estructura íntegra, Sniffer RPi5 en línea y Gateway en poste con LED Azul.',
       'ok'
     );
     if (this.cb.onScenarioChange) this.cb.onScenarioChange('normal');
   }
 
   triggerSeismicScenario(type, customMag = null) {
-    // Archive any ongoing event record before starting a fresh one
     if (this.currentEventRecord) {
       this.currentEventRecord.active = false;
       this.completedEventRecord = this.currentEventRecord;
       this.currentEventRecord = null;
     }
 
-    const anyDisplaced = this.people.some(
-      (p) => p.state === 'evacuated' || p.state === 'trapped' || Math.abs(p.y - (ZONES.find((z) => z.id === p.homeZone)?.yBase || 0)) > 0.4
-    );
-    if (anyDisplaced) {
+    const needsReset =
+      this.snifferDamaged ||
+      this.structuralCollapseStage > 0 ||
+      this.people.some(
+        (p) =>
+          p.state === 'evacuated' ||
+          p.state === 'trapped' ||
+          Math.abs(p.y - (ZONES.find((z) => z.id === p.homeZone)?.yBase || 0)) > 0.4
+      );
+
+    if (needsReset) {
       if (this.challengeMode) {
         this.spawnMissionRandom(true);
       } else {
@@ -561,6 +597,9 @@ export class LPSBoxSimulation {
       this.showPreQuakeHologram = false;
       this.collapsedZones.clear();
       this.collapseOccurred = false;
+      this.structuralCollapseStage = 0;
+      this.snifferDamaged = false;
+      this.snifferDamageTime = null;
       this.gatewayLeds = { blue: true, blink: false, yellow: false };
       this.sta = 3.2e-5;
       this.lta = 3.2e-5;
@@ -573,8 +612,8 @@ export class LPSBoxSimulation {
       const zId = this._detectZone3D(p.x, p.y, p.z) || p.homeZone;
       const zObj = ZONES.find((z) => z.id === zId) || ZONES[0];
       p.preQuakePos = { x: p.x, y: p.y, z: p.z, zone: zId, floor: zObj.floor };
-      p.reactionDelay = randRange(0.25, 1.15);
-      p.coverHoldTimer = randRange(1.8, 3.6);
+      p.reactionDelay = randRange(0.22, 1.05);
+      p.coverHoldTimer = type === 'catastrophic' ? randRange(1.2, 2.6) : randRange(1.8, 3.6);
     });
 
     if (type === 'mild') {
@@ -599,12 +638,23 @@ export class LPSBoxSimulation {
         '🔴 ¡ALERTA SÍSMICA! TERREMOTO FUERTE (6.9 Mw · 22.5 s). Monitoreando disparo STA/LTA en Sniffer RPi5...',
         'crit'
       );
-    } else {
-      const mag = customMag ?? this.customMagnitude;
-      this.scenario = mag >= 5.5 ? 'major' : 'mild';
+    } else if (type === 'catastrophic') {
+      this.scenario = 'catastrophic';
       this.quakeActive = true;
       this.quakeElapsed = 0;
-      this.quakeDuration = mag >= 5.5 ? 21.0 : 13.5;
+      this.quakeDuration = 27.5;
+      this.quakeMagnitude = 7.8;
+      this._startEventRecording('Colapso Catastrófico (7.8 Mw)', 'catastrophic', 7.8);
+      this.logEvent(
+        '🟣 ¡EMERGENCIA EXTREMA! TERREMOTO CATASTRÓFICO (7.8 Mw · 27.5 s). Riesgo inminente de colapso estructural y pérdida del Sniffer interior...',
+        'crit'
+      );
+    } else {
+      const mag = customMag ?? this.customMagnitude;
+      this.scenario = mag >= 7.3 ? 'catastrophic' : mag >= 5.5 ? 'major' : 'mild';
+      this.quakeActive = true;
+      this.quakeElapsed = 0;
+      this.quakeDuration = this.scenario === 'catastrophic' ? 27.0 : this.scenario === 'major' ? 21.5 : 13.5;
       this.quakeMagnitude = mag;
       this._startEventRecording(`Sismo Manual (${mag.toFixed(1)} Mw)`, this.scenario, mag);
       this.logEvent(
@@ -617,6 +667,14 @@ export class LPSBoxSimulation {
   }
 
   triggerPhysicalTableHit() {
+    if (this.snifferDamaged) {
+      this.logEvent(
+        '⚠️ El Nodo Sniffer RPi5 está sepultado y dañado bajo los escombros del Piso 2; no responde a estímulos locales.',
+        'warn'
+      );
+      return;
+    }
+
     this.tableShockTimer = 0.55;
     this.blinkRapidTimer = 1.6;
     if (!this.quakeActive && !this.currentEventRecord) {
@@ -649,10 +707,13 @@ export class LPSBoxSimulation {
         this._emitProbePacket(p, false, this.time);
       }
       if (!this.quakeActive && idx % 4 === 0 && p.state === 'working') {
-        p.phrase = '¿Escucharon esa vibración en el Piso 2?';
+        p.phrase = '¿Escucharon esa vibración en el segundo piso?';
         p.speechUrgency = 'mild';
         p.speechVisible = true;
         p.speechTimer = 3.0;
+        if (idx === 0 && this.cb.onNpcSpeak) {
+          this.cb.onNpcSpeak(p, p.phrase, 'mild');
+        }
       }
     });
 
@@ -665,11 +726,12 @@ export class LPSBoxSimulation {
 
   ingestExternalTelemetry(payload) {
     this.externalHardwareConnected = true;
-    if (typeof payload.sta_lta === 'number') {
+    if (typeof payload.sta_lta === 'number' && !this.snifferDamaged) {
       this.staLtaRatio = payload.sta_lta;
     }
-    if (typeof payload.accel_g === 'number') {
+    if (typeof payload.accel_g === 'number' && !this.snifferDamaged) {
       this.accel.dynamicG = payload.accel_g;
+      this.groundAccel.dynamicG = payload.accel_g;
       if (payload.accel_g > 0.25 && !this.quakeActive) {
         this.triggerPhysicalTableHit();
       }
@@ -685,10 +747,7 @@ export class LPSBoxSimulation {
   }
 
   _detectZone3D(x, y, z) {
-    if (z > 4.2 || x > 5.8) {
-      if (z > 4.2) return 'EXT';
-    }
-    // Match closest floor by height y
+    if (z > 4.2) return 'EXT';
     let bestZone = ZONES[0];
     let bestDy = Infinity;
     for (const zone of ZONES) {
@@ -708,7 +767,6 @@ export class LPSBoxSimulation {
       const dy = y - zone.yBase;
       const dz = z - zone.sensorPos.z;
       const dist = Math.max(0.9, Math.hypot(dx, dy, dz));
-      // Concrete floor slabs introduce ~12 dB attenuation per floor difference!
       const floorDiff = Math.abs(y - zone.yBase) / FLOOR_HEIGHT;
       const slabAttenuation = floorDiff * 12.5;
       const noise = randRange(-1.9, 1.9);
@@ -718,6 +776,8 @@ export class LPSBoxSimulation {
   }
 
   _emitProbePacket(person, isRandomBurst = false, customTime = null) {
+    if (this.snifferDamaged && customTime === null) return;
+
     const ts = customTime !== null ? customTime : this.time;
     const rssiByZone = this._computeRssiByZone(person.x, person.y, person.z);
 
@@ -776,7 +836,7 @@ export class LPSBoxSimulation {
   }
 
   _capturePreQuakeSnapshot() {
-    if (this.frozenSnapshot) return;
+    if (this.frozenSnapshot || this.snifferDamaged) return;
 
     const seenIds = new Set(
       this.rollingProbes
@@ -829,7 +889,7 @@ export class LPSBoxSimulation {
       magnitude: this.quakeMagnitude,
       scenario: this.scenario,
       triggerStaLta: this.staLtaRatio,
-      peakAccelG: this.accel.dynamicG,
+      peakAccelG: this.groundAccel.dynamicG,
       rawPackets: windowPackets,
       uniqueDevices,
       rawPacketCount: windowPackets.length,
@@ -844,7 +904,6 @@ export class LPSBoxSimulation {
       this.currentEventRecord.triggerRelTime = Math.max(0.05, this.time - this.currentEventRecord.startTime);
     }
 
-    // Hardware Sync: Sniffer RPi5 transmits emergency packet to Outdoor Pole Gateway -> LED Yellow ON!
     this.gatewayLeds.blue = false;
     this.gatewayLeds.yellow = true;
     this.blinkRapidTimer = 4.0;
@@ -855,7 +914,7 @@ export class LPSBoxSimulation {
       z: SNIFFER_WORLD_POS.z + 2.0,
       radius: 0.4,
       maxRadius: 24.0,
-      color: this.scenario === 'major' ? '#ef4444' : '#f59e0b',
+      color: this.scenario === 'catastrophic' ? '#a855f7' : this.scenario === 'major' ? '#ef4444' : '#f59e0b',
       alpha: 0.95
     });
 
@@ -865,8 +924,8 @@ export class LPSBoxSimulation {
         : '¡Baja el Gateway del poste de luz exterior para extraer los datos!';
 
     this.logEvent(
-      `📡 [Sniffer RPi5 → Gateway Poste] STA/LTA = ${this.staLtaRatio.toFixed(2)} ≥ 3.0. Snapshot Pre-Sismo (t₀) transmitido al Gateway exterior (LED Amarillo ON). ${poleHint}`,
-      this.scenario === 'major' ? 'crit' : 'warn'
+      `📡 [Sniffer RPi5 → Gateway Poste] STA/LTA = ${this.staLtaRatio.toFixed(2)} ≥ 3.0. Snapshot Pre-Sismo (t₀) salvado en el Gateway del poste exterior (LED Amarillo ON). ${poleHint}`,
+      this.scenario === 'mild' ? 'warn' : 'crit'
     );
 
     if (this.cb.onSnapshotCaptured) {
@@ -878,7 +937,6 @@ export class LPSBoxSimulation {
     if (this.collapseOccurred) return;
     this.collapseOccurred = true;
 
-    // Upper floors suffer highest seismic drift; pick top 2 upper/occupied floors (preferring Pisos 3 & 4 / most populated)
     const sortedZones = ['D', 'C', 'B', 'A'].sort((z1, z2) => {
       const fBonus1 = z1 === 'D' || z1 === 'C' ? 1.5 : 0;
       const fBonus2 = z2 === 'D' || z2 === 'C' ? 1.5 : 0;
@@ -889,11 +947,12 @@ export class LPSBoxSimulation {
     this.collapsedZones.add(sortedZones[0]);
     this.collapsedZones.add(sortedZones[1]);
 
-    if (this.currentEventRecord) {
+    if (this.currentEventRecord && this.currentEventRecord.collapseRelTime === null) {
       this.currentEventRecord.collapseRelTime = Math.max(0.2, this.time - this.currentEventRecord.startTime);
     }
 
     let trappedCount = 0;
+    let firstSpeaker = null;
     this.people.forEach((p, idx) => {
       const inCollapsed = this.collapsedZones.has(p.homeZone) && p.y > 0.2;
       if (inCollapsed && p.x < 5.0 && idx % 2 === 0) {
@@ -905,19 +964,120 @@ export class LPSBoxSimulation {
         p.speechUrgency = 'trapped';
         p.speechVisible = true;
         p.speechTimer = 8.0;
+        if (!firstSpeaker) firstSpeaker = p;
         trappedCount++;
       }
     });
+
+    if (firstSpeaker && this.cb.onNpcSpeak) {
+      this.cb.onNpcSpeak(firstSpeaker, firstSpeaker.phrase, 'trapped');
+    }
 
     const zName0 = ZONES.find((z) => z.id === sortedZones[0])?.code || sortedZones[0];
     const zName1 = ZONES.find((z) => z.id === sortedZones[1])?.code || sortedZones[1];
 
     this.logEvent(
-      `💥 Caída severa de estanterías, lámparas y bloqueo parcial en ${zName0} y ${zName1} (${trappedCount} personas atrapadas arriba con pérdida de señal celular).`,
+      `💥 Caída severa de estanterías y bloqueo parcial en ${zName0} y ${zName1} (${trappedCount} personas atrapadas pidiendo auxilio).`,
       'crit'
     );
     if (this.cb.onCollapse) {
       this.cb.onCollapse(Array.from(this.collapsedZones));
+    }
+  }
+
+  _advanceCatastrophicStage(stage) {
+    if (this.structuralCollapseStage >= stage) return;
+    this.structuralCollapseStage = stage;
+
+    if (stage === 1) {
+      this.collapseOccurred = true;
+      this.collapsedZones.add('D');
+      this.collapsedZones.add('C');
+      if (this.currentEventRecord && this.currentEventRecord.collapseRelTime === null) {
+        this.currentEventRecord.collapseRelTime = Math.max(0.2, this.time - this.currentEventRecord.startTime);
+      }
+
+      // Trap occupants in West Wing of Pisos 3 & 4 behind fallen concrete slabs
+      let trappedNow = 0;
+      let speaker = null;
+      this.people.forEach((p) => {
+        if ((p.homeZone === 'D' || p.homeZone === 'C') && p.x < 3.5) {
+          p.state = 'trapped';
+          p.pose = 'wave_help';
+          p.phoneOnline = Math.random() < 0.25;
+          p.phrase = TRAPPED_PHRASES[(p.id + trappedNow) % TRAPPED_PHRASES.length];
+          p.speechUrgency = 'trapped';
+          p.speechVisible = true;
+          if (!speaker) speaker = p;
+          trappedNow++;
+        }
+      });
+      if (speaker && this.cb.onNpcSpeak) {
+        this.cb.onNpcSpeak(speaker, speaker.phrase, 'trapped');
+      }
+
+      this.logEvent(
+        `💥 [COLAPSO FASE 1] ¡Se desplomaron secciones de losa y fachada oeste en Piso 4 y Piso 3! Personas atrapadas en triángulos de vida.`,
+        'crit'
+      );
+      if (this.cb.onStructuralCollapseStage) this.cb.onStructuralCollapseStage(1);
+      if (this.cb.onCollapse) this.cb.onCollapse(Array.from(this.collapsedZones));
+    } else if (stage === 2) {
+      // Stage 2: Heavy concrete beam collapses onto Piso 2 Lab -> CRUSHES & BURIES THE SNIFFER RPi 5!
+      this.collapsedZones.add('B');
+      this.snifferDamaged = true;
+      this.snifferDamageTime = this.time;
+      if (this.currentEventRecord) {
+        this.currentEventRecord.snifferDamagedRelTime = Math.max(
+          0.5,
+          this.time - this.currentEventRecord.startTime
+        );
+      }
+
+      // Trap several occupants in Piso 2 Lab as well
+      let speaker = null;
+      this.people.forEach((p) => {
+        if (p.homeZone === 'B' && p.x < 2.2 && p.state !== 'evacuated') {
+          p.state = 'trapped';
+          p.pose = 'wave_help';
+          p.phoneOnline = false;
+          p.phrase = '¡Cayó la viga central sobre el laboratorio del Piso 2, ayúdennos!';
+          p.speechUrgency = 'trapped';
+          p.speechVisible = true;
+          if (!speaker) speaker = p;
+        }
+      });
+      if (speaker && this.cb.onNpcSpeak) {
+        this.cb.onNpcSpeak(speaker, speaker.phrase, 'trapped');
+      }
+
+      this.logEvent(
+        '⚡💥 [SNIFFER RPi5 SEPULTADO] ¡Una viga y losa del Piso 3 cayeron sobre el Nodo Sniffer RPi5 dejándolo dañado bajo escombros! Enlace en vivo cortado — pero el snapshot t₀ YA FUE SALVADO afuera en el Gateway del poste de luz.',
+        'crit'
+      );
+      if (this.cb.onSnifferDamaged) this.cb.onSnifferDamaged();
+      if (this.cb.onStructuralCollapseStage) this.cb.onStructuralCollapseStage(2);
+      if (this.cb.onCollapse) this.cb.onCollapse(Array.from(this.collapsedZones));
+    } else if (stage === 3) {
+      // Stage 3: Upper stairwell lintel & front masonry debris fall
+      let totalTrapped = 0;
+      this.people.forEach((p) => {
+        if (p.y > FLOOR_HEIGHT * 1.4 && p.x < 5.4 && p.state !== 'trapped') {
+          p.state = 'trapped';
+          p.pose = 'wave_help';
+          p.phoneOnline = false;
+          p.phrase = TRAPPED_PHRASES[p.id % TRAPPED_PHRASES.length];
+          p.speechUrgency = 'trapped';
+          p.speechVisible = true;
+        }
+        if (p.state === 'trapped') totalTrapped++;
+      });
+
+      this.logEvent(
+        `🧱 [COLAPSO FASE 3] Caída de mampostería y bloqueo de accesos altos: ${totalTrapped} personas atrapadas dentro de la estructura. ¡Usa el Gateway del poste exterior para ubicarlas!`,
+        'crit'
+      );
+      if (this.cb.onStructuralCollapseStage) this.cb.onStructuralCollapseStage(3);
     }
   }
 
@@ -947,7 +1107,7 @@ export class LPSBoxSimulation {
       }
     }
 
-    // 1. Update Seismic Waveform & MPU6050 STA/LTA on RPi5 Sniffer
+    // 1. Update Ground Seismic Waveform
     let envAccel = 0.004 + Math.random() * 0.003;
 
     if (this.quakeActive) {
@@ -957,14 +1117,35 @@ export class LPSBoxSimulation {
 
       if (t <= dur) {
         if (this.scenario === 'mild') {
-          // 14.0s Mild Tremor: P-wave (0..2.2s), gentle swaying S-wave (1.8..10.5s), coda (10.5..14.0s)
           const pEnv = t < 2.2 ? Math.sin((t / 2.2) * Math.PI) * 0.045 : 0;
           const sEnv1 = t >= 1.6 ? Math.exp(-Math.pow((t - 4.8) / 2.6, 2)) * 0.098 : 0;
           const sEnv2 = t >= 5.0 ? Math.exp(-Math.pow((t - 8.6) / 2.3, 2)) * 0.068 : 0;
           const mod = 0.72 + 0.28 * Math.sin(t * 6.5) + 0.35 * Math.random();
           envAccel += (pEnv + sEnv1 + sEnv2) * mod;
+        } else if (this.scenario === 'catastrophic') {
+          // 27.5s Catastrophic 7.8 Mw Earthquake + Staged Structural Collapse!
+          const pEnv = t < 2.6 ? Math.sin((t / 2.6) * Math.PI) * 0.26 : 0;
+          const sPulse1 = t >= 1.8 ? Math.exp(-Math.pow((t - 5.0) / 2.5, 2)) * 1.02 : 0;
+          const sPulse2 = t >= 4.8 ? Math.exp(-Math.pow((t - 9.2) / 3.0, 2)) * 1.15 : 0;
+          const sPulse3 = t >= 9.0 ? Math.exp(-Math.pow((t - 14.5) / 2.8, 2)) * 0.86 : 0;
+          const replica = t >= 17.0 ? Math.exp(-Math.pow((t - 20.4) / 2.1, 2)) * 0.52 : 0;
+          const coda = t >= 18.0 ? Math.max(0, (1 - (t - 18.0) / 9.5)) * 0.14 : 0;
+          const mod = 0.72 + 0.28 * Math.sin(t * 10.4) + 0.55 * Math.random();
+          envAccel += (pEnv + sPulse1 + sPulse2 + sPulse3 + replica + coda) * mod;
+
+          if (t >= 4.2 && this.structuralCollapseStage < 1) {
+            this._advanceCatastrophicStage(1);
+          }
+          if (t >= 7.4 && this.structuralCollapseStage < 2) {
+            // Ensure pre-quake snapshot transferred right before beam hits if not already
+            if (!this.frozenSnapshot) this._capturePreQuakeSnapshot();
+            this._advanceCatastrophicStage(2);
+          }
+          if (t >= 10.6 && this.structuralCollapseStage < 3) {
+            this._advanceCatastrophicStage(3);
+          }
         } else {
-          // 22.5s Major Earthquake: P-wave (0..2.8s), sustained multi-pulse S-wave (2.2..15.5s), surface/aftershock (15.5..22.5s)
+          // 22.5s Major Earthquake (6.9 Mw)
           const magScale = Math.max(0.55, (this.quakeMagnitude - 4.5) / 2.4);
           const pEnv = t < 2.8 ? Math.sin((t / 2.8) * Math.PI) * 0.15 * magScale : 0;
           const sPulse1 = t >= 2.0 ? Math.exp(-Math.pow((t - 5.4) / 2.7, 2)) * 0.68 * magScale : 0;
@@ -981,62 +1162,79 @@ export class LPSBoxSimulation {
         }
       } else {
         this.quakeActive = false;
-        this._eventPostTailTimer = 2.6; // record 2.6s of calm post-event tail before sealing record
+        this._eventPostTailTimer = 2.6;
         this.logEvent(
-          '📉 Movimiento sísmico finalizado. El registro completo de las ondas quedó guardado en el sismograma y el Gateway del poste tiene los datos t₀.',
+          this.snifferDamaged
+            ? '📉 Terremoto catastrófico finalizado. El Sniffer interior quedó destruido bajo escombros, pero el Gateway en el poste exterior conserva intacta la caja negra t₀.'
+            : '📉 Movimiento sísmico finalizado. El registro completo de ondas quedó guardado y el Gateway del poste tiene los datos t₀.',
           'info'
         );
       }
     }
 
-    if (this.tableShockTimer > 0) {
+    if (this.tableShockTimer > 0 && !this.snifferDamaged) {
       this.tableShockTimer -= clampedDt;
       envAccel += 0.44 * Math.max(0, this.tableShockTimer / 0.55);
     }
 
-    this.accel.dynamicG = envAccel;
-    const freq = this.scenario === 'major' ? 18.5 : 12.5;
-    this.accel.x = Math.sin(this.time * freq) * envAccel;
-    this.accel.y = Math.cos(this.time * (freq * 1.23)) * envAccel * 0.85;
-    this.accel.z = 1.0 + Math.sin(this.time * (freq * 1.67)) * envAccel * 0.6;
+    // Physical ground acceleration continues shaking the 4-story structure regardless of Sniffer damage!
+    const freq = this.scenario === 'catastrophic' ? 20.5 : this.scenario === 'major' ? 18.5 : 12.5;
+    this.groundAccel.dynamicG = envAccel;
+    this.groundAccel.x = Math.sin(this.time * freq) * envAccel;
+    this.groundAccel.y = Math.cos(this.time * (freq * 1.23)) * envAccel * 0.85;
+    this.groundAccel.z = 1.0 + Math.sin(this.time * (freq * 1.67)) * envAccel * 0.6;
 
-    // Recursive STA/LTA energy detector
-    const energy = envAccel * envAccel + 1e-6;
-    const alphaSta = Math.min(1, clampedDt / 0.35);
-    const alphaLta = Math.min(1, clampedDt / 8.0);
-    this.sta += alphaSta * (energy - this.sta);
-    const ltaRate = this.sta / Math.max(this.lta, 1e-7) > 2.4 ? alphaLta * 0.09 : alphaLta;
-    this.lta += ltaRate * (energy - this.lta);
-    this.staLtaRatio = Math.min(14.0, Math.sqrt(this.sta / Math.max(this.lta, 1e-7)));
+    // Sniffer MPU6050 reading (cuts out to 0.000g once buried under rubble!)
+    if (this.snifferDamaged) {
+      this.accel.dynamicG = 0;
+      this.accel.x = 0;
+      this.accel.y = 0;
+      this.accel.z = 0;
+      this.staLtaRatio = 0;
+    } else {
+      this.accel.dynamicG = envAccel;
+      this.accel.x = this.groundAccel.x;
+      this.accel.y = this.groundAccel.y;
+      this.accel.z = this.groundAccel.z;
 
-    if (this.frozenSnapshot && envAccel > this.frozenSnapshot.peakAccelG) {
-      this.frozenSnapshot.peakAccelG = envAccel;
-    }
+      const energy = envAccel * envAccel + 1e-6;
+      const alphaSta = Math.min(1, clampedDt / 0.35);
+      const alphaLta = Math.min(1, clampedDt / 8.0);
+      this.sta += alphaSta * (energy - this.sta);
+      const ltaRate = this.sta / Math.max(this.lta, 1e-7) > 2.4 ? alphaLta * 0.09 : alphaLta;
+      this.lta += ltaRate * (energy - this.lta);
+      this.staLtaRatio = Math.min(14.0, Math.sqrt(this.sta / Math.max(this.lta, 1e-7)));
 
-    // Trigger Pre-Quake Snapshot when STA/LTA crosses threshold during seismic scenario
-    if (this.quakeActive && !this.frozenSnapshot && this.staLtaRatio >= this.staLtaThreshold) {
-      this._capturePreQuakeSnapshot();
+      if (this.frozenSnapshot && envAccel > this.frozenSnapshot.peakAccelG) {
+        this.frozenSnapshot.peakAccelG = envAccel;
+      }
+
+      if (this.quakeActive && !this.frozenSnapshot && this.staLtaRatio >= this.staLtaThreshold) {
+        this._capturePreQuakeSnapshot();
+      }
     }
 
     // Live rolling seismogram buffer
     this.seismoHistory.push({
       t: this.time,
-      accelG: envAccel,
+      accelG: this.snifferDamaged ? 0 : envAccel,
+      groundG: envAccel,
       ratio: this.staLtaRatio,
-      triggered: this.staLtaRatio >= this.staLtaThreshold
+      triggered: !this.snifferDamaged && this.staLtaRatio >= this.staLtaThreshold,
+      snifferOffline: this.snifferDamaged
     });
     if (this.seismoHistory.length > 240) {
       this.seismoHistory.shift();
     }
 
-    // Full-Event Seismogram Recording (persists complete earthquake wave!)
+    // Full-Event Seismogram Recording
     if (this.currentEventRecord) {
       this._eventSampleAccum += clampedDt;
       if (envAccel > this.currentEventRecord.peakG) {
         this.currentEventRecord.peakG = envAccel;
         this.currentEventRecord.peakRelTime = Math.max(0, this.time - this.currentEventRecord.startTime);
       }
-      if (this.staLtaRatio > this.currentEventRecord.peakStaLta) {
+      if (!this.snifferDamaged && this.staLtaRatio > this.currentEventRecord.peakStaLta) {
         this.currentEventRecord.peakStaLta = this.staLtaRatio;
       }
 
@@ -1044,9 +1242,11 @@ export class LPSBoxSimulation {
         this._eventSampleAccum = 0;
         this.currentEventRecord.samples.push({
           tRel: this.time - this.currentEventRecord.startTime,
-          accelG: envAccel,
+          accelG: this.snifferDamaged ? 0 : envAccel,
+          groundG: envAccel,
           ratio: this.staLtaRatio,
-          triggered: this.staLtaRatio >= this.staLtaThreshold
+          triggered: !this.snifferDamaged && this.staLtaRatio >= this.staLtaThreshold,
+          snifferOffline: this.snifferDamaged
         });
       }
 
@@ -1061,7 +1261,7 @@ export class LPSBoxSimulation {
       }
     }
 
-    // 2. Update People Movement, Stairwell Descent, Dialogues & Probe Emissions
+    // 2. Update People Movement, Stairwell Descent, Dialogues & Spoken Voices
     this._updatePeople(clampedDt);
 
     // Prune rolling 10s probe window
@@ -1070,19 +1270,21 @@ export class LPSBoxSimulation {
       this.rollingProbes.shift();
     }
 
-    // Periodic Sniffer RPi5 -> Outdoor Pole Gateway wireless heartbeat
-    this.batchSyncTimer += clampedDt;
-    if (this.batchSyncTimer >= 3.2) {
-      this.batchSyncTimer = 0;
-      this.blinkPulseTimer = 0.55;
-      if (this.cb.onPacketHeartbeat) this.cb.onPacketHeartbeat();
+    // Periodic Sniffer RPi5 -> Outdoor Pole Gateway wireless heartbeat (only while Sniffer is alive!)
+    if (!this.snifferDamaged) {
+      this.batchSyncTimer += clampedDt;
+      if (this.batchSyncTimer >= 3.2) {
+        this.batchSyncTimer = 0;
+        this.blinkPulseTimer = 0.55;
+        if (this.cb.onPacketHeartbeat) this.cb.onPacketHeartbeat();
+      }
     }
 
     // 3. Update Gateway 3 LEDs on Outdoor Pole
-    if (this.blinkRapidTimer > 0) {
+    if (!this.snifferDamaged && this.blinkRapidTimer > 0) {
       this.blinkRapidTimer -= clampedDt;
       this.gatewayLeds.blink = Math.floor(this.time * 14) % 2 === 0;
-    } else if (this.blinkPulseTimer > 0) {
+    } else if (!this.snifferDamaged && this.blinkPulseTimer > 0) {
       this.blinkPulseTimer -= clampedDt;
       this.gatewayLeds.blink = Math.floor(this.time * 10) % 2 === 0;
     } else {
@@ -1114,33 +1316,46 @@ export class LPSBoxSimulation {
 
   _updatePeople(dt) {
     const noiseMultiplier = this.macNoiseLevel === 'high' ? 1.8 : this.macNoiseLevel === 'medium' ? 1.0 : 0.25;
+    const isSevere = this.scenario === 'major' || this.scenario === 'catastrophic';
 
-    // Rotate active speech bubbles cleanly so ~5-7 NPCs speak at once without visual clutter
+    // Rotate active speech bubbles + emit spoken voice line for the featured speaker!
     this._speechCycleTimer -= dt;
     if (this._speechCycleTimer <= 0) {
-      this._speechCycleTimer = this.quakeActive ? 1.4 : 2.6;
+      this._speechCycleTimer = this.quakeActive ? 1.5 : 3.1;
       const maxVisible = this.quakeActive ? 7 : 4;
       const candidates = [...this.people].sort(() => Math.random() - 0.5);
       let shown = 0;
+      let chosenVoiceSpeaker = null;
+
       candidates.forEach((p) => {
         if (p.state === 'trapped' && shown < maxVisible) {
           p.speechVisible = true;
           p.phrase = TRAPPED_PHRASES[(p.id + Math.floor(this.time / 3)) % TRAPPED_PHRASES.length];
+          p.speechUrgency = 'trapped';
+          if (!chosenVoiceSpeaker) chosenVoiceSpeaker = p;
           shown++;
-        } else if (shown < maxVisible && Math.random() < (this.quakeActive ? 0.75 : 0.45)) {
+        } else if (shown < maxVisible && Math.random() < (this.quakeActive ? 0.78 : 0.48)) {
           p.speechVisible = true;
+          if (!chosenVoiceSpeaker) chosenVoiceSpeaker = p;
           shown++;
         } else {
           p.speechVisible = false;
         }
       });
+
+      if (chosenVoiceSpeaker && this.cb.onNpcSpeak) {
+        this.cb.onNpcSpeak(
+          chosenVoiceSpeaker,
+          chosenVoiceSpeaker.phrase,
+          chosenVoiceSpeaker.speechUrgency || 'normal'
+        );
+      }
     }
 
     this.people.forEach((p) => {
       const homeZone = ZONES.find((z) => z.id === p.homeZone) || ZONES[0];
 
-      // Transitions during active seismic scenarios
-      if (this.quakeActive && this.quakeElapsed >= p.reactionDelay) {
+      if (this.quakeActive && this.quakeElapsed >= p.reactionDelay && p.state !== 'trapped') {
         if (this.scenario === 'mild') {
           if (p.state === 'working') {
             if (p.willEvacuateMild && this.quakeElapsed > 4.2) {
@@ -1168,15 +1383,17 @@ export class LPSBoxSimulation {
             p.phrase = 'Bajemos en orden por la escalera preventiva';
             p.speechUrgency = 'mild';
           }
-        } else if (this.scenario === 'major') {
+        } else if (isSevere) {
           if (p.state === 'working' || p.state === 'mild_react' || p.state === 'crouching') {
             p.state = 'duck_cover';
             p.pose = 'cover_head';
             const cover = homeZone.coverSpots[p.id % homeZone.coverSpots.length];
             p.targetX = cover.x;
             p.targetZ = cover.z;
-            p.phrase = MAJOR_COVER_PHRASES[p.id % MAJOR_COVER_PHRASES.length];
-            p.speechUrgency = 'major';
+            const pool =
+              this.scenario === 'catastrophic' ? CATASTROPHIC_COVER_PHRASES : MAJOR_COVER_PHRASES;
+            p.phrase = pool[p.id % pool.length];
+            p.speechUrgency = this.scenario === 'catastrophic' ? 'catastrophic' : 'major';
             p.speechVisible = p.id % 3 === 0;
           } else if (p.state === 'duck_cover') {
             p.coverHoldTimer -= dt;
@@ -1184,7 +1401,7 @@ export class LPSBoxSimulation {
               p.state = 'evacuating_panic';
               p.pose = 'run';
               p.phrase = MAJOR_EVAC_PHRASES[p.id % MAJOR_EVAC_PHRASES.length];
-              p.speechUrgency = 'major';
+              p.speechUrgency = this.scenario === 'catastrophic' ? 'catastrophic' : 'major';
             }
           }
         }
@@ -1197,7 +1414,7 @@ export class LPSBoxSimulation {
         }
       }
 
-      // Locomotion & 4-Story Stairwell Pathfinding
+      // Locomotion & Aligned U-Turn Stairwell Descent
       let speed = 1.05;
       if (p.state === 'working') {
         p.pose = 'stand';
@@ -1218,38 +1435,42 @@ export class LPSBoxSimulation {
         p.pose = 'cover_head';
       } else if (p.state === 'evacuating_calm' || p.state === 'evacuating_panic') {
         const isPanic = p.state === 'evacuating_panic';
-        speed = isPanic ? 3.4 : 1.85;
+        speed = isPanic ? 3.45 : 1.85;
         p.pose = isPanic ? 'run' : 'stand';
 
         if (p.y > 0.12) {
-          // Upper floor (Pisos 2, 3, 4): head right to stairwell doorway (x ~ 5.5, z ~ -0.8), then descend stairwell!
+          // Upper floors: head to South Stairwell Doorway at x = 5.55, z = 2.45
           if (p.x < 5.55) {
             p.targetX = 5.85;
-            p.targetZ = -1.2 + ((p.id % 3) - 1) * 0.55;
+            p.targetZ = 2.35 + ((p.id % 3) - 1) * 0.35;
           } else {
-            // Inside stairwell tower (x in [6.0..8.6]): descend vertically while switchbacking along Z!
-            const stairDescentSpeed = isPanic ? 2.35 : 1.45;
+            // Inside U-turn stairwell (South Floor Landing z=+2.4 <-> North Mid-Landing z=-2.8)
+            const stairDescentSpeed = isPanic ? 2.4 : 1.48;
             p.y = Math.max(0, p.y - stairDescentSpeed * dt);
-            const flightProgress = (p.y % FLOOR_HEIGHT) / FLOOR_HEIGHT; // 1.0 -> 0.0 per floor
-            const laneOffset = ((p.id % 3) - 1) * 0.25;
-            p.targetX = (flightProgress > 0.5 ? 6.55 : 7.85) + laneOffset;
-            p.targetZ = flightProgress > 0.5
-              ? -2.4 + (1.0 - flightProgress) * 9.0
-              : 2.1 - (0.5 - flightProgress) * 9.0;
+            const flightProgress = (p.y % FLOOR_HEIGHT) / FLOOR_HEIGHT; // 1.0 -> 0.5 -> 0.0
+            const laneOffset = ((p.id % 3) - 1) * 0.2;
+            if (flightProgress > 0.5) {
+              // Outer flight descending from South (+2.2) to North (-2.8) along x ~ 7.95
+              p.targetX = 7.95 + laneOffset;
+              p.targetZ = 2.2 - ((1.0 - flightProgress) / 0.5) * 5.0;
+            } else {
+              // Inner flight descending from North (-2.8) to South (+2.2) along x ~ 6.45
+              p.targetX = 6.45 + laneOffset;
+              p.targetZ = -2.8 + ((0.5 - flightProgress) / 0.5) * 5.0;
+            }
           }
         } else {
           p.y = 0;
-          // Ground floor (Piso 1): exit via stairwell street door (x > 5.2) or main lobby front door (x ~ -0.8, z = 4.0)
+          // Ground floor: exit via stairwell front doorway (x=7.2, z=4.5) or main lobby portal (x=-1.2, z=4.5)
           if (p.z < 3.9) {
             if (p.x > 4.6) {
-              p.targetX = 7.1 + ((p.id % 2) - 0.5) * 0.4;
-              p.targetZ = 4.5;
+              p.targetX = 7.2 + ((p.id % 2) - 0.5) * 0.4;
+              p.targetZ = 4.6;
             } else {
-              p.targetX = -1.2 + ((p.id % 3) - 1) * 0.55;
-              p.targetZ = 4.5;
+              p.targetX = -1.2 + ((p.id % 3) - 1) * 0.5;
+              p.targetZ = 4.6;
             }
           } else {
-            // Outside on sidewalk/plaza -> gather at Safe Assembly Point!
             const angle = (p.id * 1.39) % (Math.PI * 2);
             const rad = 0.65 + (p.id % 4) * 0.58;
             p.targetX = ASSEMBLY_POINT.x + Math.cos(angle) * rad;
@@ -1285,7 +1506,6 @@ export class LPSBoxSimulation {
         p.vx = 0;
         p.vz = 0;
         if (p.state === 'evacuated') {
-          // Look back toward the 4-story building
           p.facing = Math.atan2(-1.0 - p.x, -0.5 - p.z);
         }
       }
@@ -1293,8 +1513,8 @@ export class LPSBoxSimulation {
       p.currentZone = this._detectZone3D(p.x, p.y, p.z) || p.currentZone;
       p.floor = Math.max(1, Math.min(4, Math.round(p.y / FLOOR_HEIGHT) + 1));
 
-      // Smartphone WiFi/BLE Probe Request emission
-      if (p.phoneOnline) {
+      // Smartphone WiFi/BLE Probe Request emission (captured only while Sniffer RPi5 is intact)
+      if (p.phoneOnline && !this.snifferDamaged) {
         p.probeTimer -= dt;
         if (p.probeTimer <= 0) {
           p.probeTimer = randRange(2.1, 4.3);
@@ -1357,16 +1577,21 @@ export class LPSBoxSimulation {
 
     let bestZone = 'D';
     let bestMetric = -1;
+    const trappedByZone = { A: 0, B: 0, C: 0, D: 0 };
     ['A', 'B', 'C', 'D'].forEach((zid) => {
       const trappedHere = this.people.filter((p) => p.state === 'trapped' && p.currentZone === zid).length;
-      const metric = trappedHere > 0 ? 100 + trappedHere : truthZones[zid];
+      trappedByZone[zid] = trappedHere;
+      const metric = trappedHere > 0 ? 100 + trappedHere * 10 + (truthZones[zid] || 0) : truthZones[zid];
       if (metric > bestMetric) {
         bestMetric = metric;
         bestZone = zid;
       }
     });
     const bestZoneCode = ZONES.find((z) => z.id === bestZone)?.code || bestZone;
-    const priorityCorrect = priorityZoneGuess === bestZone || truthZones[priorityZoneGuess] === truthZones[bestZone];
+    const priorityCorrect =
+      priorityZoneGuess === bestZone ||
+      (trappedByZone[bestZone] > 0 && trappedByZone[priorityZoneGuess] > 0 && this.collapsedZones.has(priorityZoneGuess)) ||
+      (trappedByZone[bestZone] === 0 && truthZones[priorityZoneGuess] === truthZones[bestZone]);
     const priorityPoints = priorityCorrect ? 15 : 5;
 
     const finalScore = Math.min(100, totalPoints + zonePoints + priorityPoints);
