@@ -11,10 +11,12 @@ function makeGeometry() {
   globalThis.document = { createElement: () => ({ getContext: () => ctx }) };
   const env = { scene: new THREE.Group(), buildingGroup: new THREE.Group(), wallBoxes: [],
     walkableTeleportMeshes: [], supportSlabs: [], supportRamps: [], dynamicProps: [] };
-  try { buildCytCampusAndBuilding(env); } finally { globalThis.document = previous; }
-  return { staticColliders: env.wallBoxes, collapseColliders: [], sim: { structuralCollapseStage: 0 },
+  let result;
+  try { result = buildCytCampusAndBuilding(env); } finally { globalThis.document = previous; }
+  return { instancedMeshes: result.instancedMeshes, staticColliders: env.wallBoxes, collapseColliders: [], sim: { structuralCollapseStage: 0 },
     supportSlabs: env.supportSlabs, supportRamps: env.supportRamps,
     _getSupportHeight: LPSBoxScene3D.prototype._getSupportHeight,
+    _getCeilingHeight: LPSBoxScene3D.prototype._getCeilingHeight,
     _resolveOperatorCollisions: LPSBoxScene3D.prototype._resolveOperatorCollisions };
 }
 
@@ -39,8 +41,8 @@ function walk(scene, points, startY) {
 
 test('auditorium stairs connect the library to the basement both ways', () => {
   const scene = makeGeometry();
-  assert.ok(Math.abs(walk(scene, [[-11.0, 4.0], [-14.9, 4.0], [-14.9, 5.4], [-14.9, 10.4]], 0.12) + 3.4) < 0.1);
-  assert.ok(Math.abs(walk(scene, [[-14.9, 10.4], [-14.9, 5.4]], -3.4) - 0.12) < 0.1);
+  assert.ok(Math.abs(walk(scene, [[-11.0, 4.8], [-20.3, 4.8], [-20.3, 5.4], [-20.3, 10.4]], 0.12) + 3.4) < 0.1);
+  assert.ok(Math.abs(walk(scene, [[-20.3, 10.4], [-20.3, 5.4]], -3.4) - 0.12) < 0.1);
 });
 
 test('east staircase connects ground and first upper floor without solid slabs blocking it', () => {
@@ -84,4 +86,51 @@ test('evacuation paths keep height tied to stair movement', () => {
   for (let i = 0; i < 6000; i++) sim.update(0.05);
   assert.ok(sim.people.every(p => p.state === 'evacuated'));
   assert.ok(sim.people.every(p => Math.abs(p.y - 0.12) < 0.01));
+});
+
+test('the separate west library has an entrance and a link to the original library', () => {
+  const scene = makeGeometry();
+  assert.ok(Math.abs(walk(scene, [[-29.5, 11], [-29.5, 8.5]], 0.12) - 0.12) < 0.1);
+  assert.ok(Math.abs(walk(scene, [[-24, 0], [-21, 0]], 0.12) - 0.12) < 0.1);
+});
+
+test('rear library stairs connect all four floors and open onto each landing', () => {
+  const scene = makeGeometry();
+  const flight = [[-18.5, -10.8], [-18.5, -12.1], [-21.1, -12.1], [-21.1, -12.75],
+    [-21.1, -17.0], [-21.1, -18], [-17.6, -18], [-17.6, -17], [-17.6, -12.75], [-17.6, -12.1], [-18.5, -12.1], [-18.5, -10.8]];
+  for (let level = 0; level < 3; level++) {
+    const y = 0.12 + level * 3.4;
+    assert.ok(Math.abs(walk(scene, flight, y) - (y + 3.4)) < 0.1);
+    assert.ok(Math.abs(walk(scene, flight.toReversed(), y + 3.4) - y) < 0.1);
+  }
+});
+
+test('classroom furniture does not encroach on the principal ramp shaft', () => {
+  const scene = makeGeometry();
+  const matrix = new THREE.Matrix4();
+  const position = new THREE.Vector3(), quaternion = new THREE.Quaternion(), scale = new THREE.Vector3();
+  for (const mesh of scene.instancedMeshes.filter(m => ['cls_desk', 'cls_chair', 'pc_monitor', 'pc_screen'].includes(m.name))) {
+    for (let i = 0; i < mesh.count; i++) {
+      mesh.getMatrixAt(i, matrix);
+      matrix.decompose(position, quaternion, scale);
+      if (position.z < -4.5 && position.z > -11.5)
+        assert.ok(position.x - Math.abs(scale.x) / 2 >= -10, `${mesh.name} extends into ramp at x=${position.x}`);
+    }
+  }
+});
+
+test('the enlarged east wing is reachable through the stair landing on every level', () => {
+  const scene = makeGeometry();
+  for (const y of [0.12, 3.52, 6.92, 10.32, 13.72]) {
+    assert.ok(Math.abs(walk(scene, [[16.65, -3.3], [19.7, -3.3]], y) - y) < 0.1);
+    if (y > 0.2 && y < 13)
+      for (const x of [19.7, 25.0])
+        assert.ok(Math.abs(walk(scene, [[x, -3.3], [x, -5.4]], y) - y) < 0.1);
+  }
+});
+
+test('ceiling collision follows slabs and leaves the stair shafts open', () => {
+  const scene = makeGeometry();
+  assert.ok(Math.abs(scene._getCeilingHeight(-2, -7, 3.1, 3.4) - 3.28) < 0.01);
+  assert.equal(scene._getCeilingHeight(16.65, -6.0, 3.1, 3.4), Infinity);
 });

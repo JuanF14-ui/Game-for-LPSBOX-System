@@ -177,31 +177,30 @@ function drawSpeechBubbleCanvas(canvas, text, urgency = 'normal') {
   ctx.closePath();
   ctx.fill();
 
-  // Word-wrap into up to 2 lines
+  // Ajustar tamaño y líneas al contenido completo; no truncar frases a mitad.
   ctx.fillStyle = style.text;
-  ctx.font = 'bold 23px system-ui, -apple-system, sans-serif';
   ctx.textAlign = 'center';
-
-  const words = String(text || '').split(' ');
-  const lines = [];
-  let cur = '';
-  words.forEach((word) => {
-    const test = cur ? `${cur} ${word}` : word;
-    if (test.length > 26 && cur) {
-      lines.push(cur);
-      cur = word;
-    } else {
-      cur = test;
+  const words = String(text || '').split(/\s+/).filter(Boolean);
+  let lines = [];
+  let size = 25;
+  for (; size >= 13; size--) {
+    ctx.font = `bold ${size}px system-ui, -apple-system, sans-serif`;
+    lines = [];
+    let current = '';
+    for (const word of words) {
+      const next = current ? `${current} ${word}` : word;
+      if (current && ctx.measureText(next).width > w - 44) {
+        lines.push(current);
+        current = word;
+      } else current = next;
     }
-  });
-  if (cur) lines.push(cur);
-
-  if (lines.length === 1) {
-    ctx.fillText(lines[0], w / 2, 58);
-  } else {
-    ctx.fillText(lines[0], w / 2, 43);
-    ctx.fillText(lines.slice(1).join(' ').slice(0, 32), w / 2, 74);
+    if (current) lines.push(current);
+    if (lines.length * (size + 4) <= boxH - 16) break;
   }
+  const lineHeight = size + 4;
+  const firstY = 6 + boxH / 2 - ((lines.length - 1) * lineHeight) / 2 + size * 0.35;
+  lines.forEach((line, index) => ctx.fillText(line, w / 2, firstY + index * lineHeight, w - 44));
+
 }
 
 export class LPSBoxScene3D {
@@ -221,7 +220,7 @@ export class LPSBoxScene3D {
     const h = container.clientHeight || window.innerHeight;
 
     this.camera = new THREE.PerspectiveCamera(50, w / h, 0.1, 180);
-    this.camera.position.set(14, 13.5, 43);
+    this.camera.position.set(12, 18, 54);
 
     try {
       this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
@@ -243,7 +242,7 @@ export class LPSBoxScene3D {
     this.controls.maxPolarAngle = Math.PI * 0.492;
     this.controls.minDistance = 0.9;
     this.controls.maxDistance = 54;
-    this.controls.target.set(-4.5, 6.6, -2);
+    this.controls.target.set(-9, 6.6, -2);
     this.controls.autoRotate = true;
     this.controls.autoRotateSpeed = 0.55;
     this.introOrbitActive = true;
@@ -2308,17 +2307,17 @@ export class LPSBoxScene3D {
     // Floating Speech Bubble Sprite!
     const bubbleCanvas = document.createElement('canvas');
     bubbleCanvas.width = 480;
-    bubbleCanvas.height = 118;
+    bubbleCanvas.height = 168;
     drawSpeechBubbleCanvas(bubbleCanvas, person.phrase, person.speechUrgency);
     const bubbleTex = new THREE.CanvasTexture(bubbleCanvas);
     bubbleTex.colorSpace = THREE.SRGBColorSpace;
     const bubbleMat = new THREE.SpriteMaterial({
       map: bubbleTex,
       transparent: true,
-      depthTest: false
+      depthTest: true
     });
     const bubbleSprite = new THREE.Sprite(bubbleMat);
-    bubbleSprite.scale.set(2.35, 0.58, 1);
+    bubbleSprite.scale.set(2.5, 0.875, 1);
     bubbleSprite.position.set(0, 2.08, 0);
     bubbleSprite.renderOrder = 10;
     bubbleSprite.visible = person.speechVisible;
@@ -3080,7 +3079,7 @@ export class LPSBoxScene3D {
   teleportXrToPreset(preset) {
     const presets = {
       view_exterior: { x: 1, y: 0.08, z: 17, yaw: 0 },
-      view_auditorium: { x: -10.8, y: -3.4, z: 8.7, yaw: 0 },
+      view_auditorium: { x: -10.8, y: -3.4, z: -10.1, yaw: Math.PI },
       floor_0: { x: -7, y: 0.12, z: -3.3, yaw: 0 },
       floor_1: { x: 0, y: 3.52, z: -3.5, yaw: 0 },
       floor_2: { x: 0, y: 6.92, z: -3.5, yaw: 0 },
@@ -3700,8 +3699,7 @@ export class LPSBoxScene3D {
     const step = 0.54;
     let best = -Infinity;
     // Ground is absent in the stair opening inside the ground-floor library.
-    const opening = x >= -16.8 && x <= -13 && z >= 5.3 && z <= 10.7;
-    if (!opening && feetY >= -0.4) best = 0;
+    const opening = x >= -22.1 && x <= -18.5 && z >= 5.3 && z <= 10.7;
     // En rampas superpuestas, elegir el soporte más próximo a los pies evita
     // saltar prematuramente al tramo del piso superior.
     const consider = h => {
@@ -3724,7 +3722,18 @@ export class LPSBoxScene3D {
     // Al iniciar una pendiente, no quedarse pegado a la losa plana inferior.
     if (nearestRamp !== null && Math.abs(nearestRamp - feetY) <= 0.12) best = nearestRamp;
     else if (nearestRamp !== null) consider(nearestRamp);
+    if (!opening && feetY >= -0.4 && (!Number.isFinite(best) || best < -0.4)) best = 0;
     return Number.isFinite(best) ? best : (feetY < -0.4 ? -3.4 : 0);
+  }
+
+  _getCeilingHeight(x, z, oldHead, newHead) {
+    let ceiling = Infinity;
+    for (const slab of this.supportSlabs) {
+      if (x < slab.xMin || x > slab.xMax || z < slab.zMin || z > slab.zMax) continue;
+      const underside = slab.topY - 0.24;
+      if (oldHead <= underside + 0.02 && newHead > underside && underside < ceiling) ceiling = underside;
+    }
+    return ceiling;
   }
 
   _resolveOperatorCollisions(nextX, nextZ, feetY, headY) {
@@ -3844,8 +3853,8 @@ export class LPSBoxScene3D {
 
     if (mode === 'tactical') {
       this.controls.enabled = true;
-      this.camera.position.set(14, 13.5, 43);
-      this.controls.target.set(-4.5, 6.6, -2);
+      this.camera.position.set(12, 18, 54);
+      this.controls.target.set(-9, 6.6, -2);
     } else if (mode === 'gateway' || mode === 'pole') {
       this.controls.enabled = true;
       const focusY = this.sim.gatewayPoleState === 'down' ? 1.55 : 3.35;
@@ -4192,20 +4201,15 @@ export class LPSBoxScene3D {
         let candidateY = this.fpPos.y + this.fpVelY * dt;
         const supportY = this._getSupportHeight(this.fpPos.x, this.fpPos.z, this.fpPos.y);
 
-        // Indoor ceiling head bump (floors f = 0..3 have slab bottoms at (f+1)*3.2)
-        if (
-          this.fpVelY > 0 &&
-          this.fpPos.x >= -8.65 &&
-          this.fpPos.x <= 5.52 &&
-          this.fpPos.z >= -4.4 &&
-          this.fpPos.z <= 3.55 &&
-          this.fpPos.y < 12.6
-        ) {
-          const currentFloorIdx = Math.floor((this.fpPos.y + 0.1) / FLOOR_HEIGHT);
-          const ceilingBottom = (currentFloorIdx + 1) * FLOOR_HEIGHT - 0.06;
-          if (candidateY + this._curEyeH + 0.18 > ceilingBottom) {
-            candidateY = ceilingBottom - this._curEyeH - 0.18;
-            this.fpVelY = -0.4;
+        // Los techos se obtienen de las mismas losas que sirven de piso al nivel superior.
+        // No bloquear un salto en el vacío de una escalera donde no existe losa.
+        if (this.fpVelY > 0) {
+          const headOffset = this._curEyeH + 0.18;
+          const ceiling = this._getCeilingHeight(this.fpPos.x, this.fpPos.z,
+            this.fpPos.y + headOffset, candidateY + headOffset);
+          if (Number.isFinite(ceiling)) {
+            candidateY = ceiling - headOffset;
+            this.fpVelY = 0;
           }
         }
 

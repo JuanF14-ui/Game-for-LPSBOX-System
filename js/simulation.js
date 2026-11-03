@@ -38,6 +38,7 @@ export const ZONES = [
     color: '#10b981',
     areas: [
       { xMin: -16.6, xMax: -15.0, zMin: -3.4, zMax: 3.4, role: 'library' },
+      { xMin: -28.5, xMax: -26.8, zMin: 6.5, zMax: 8.4, role: 'library' },
       { xMin: -12.0, xMax: -4.2, zMin: -10.4, zMax: -4.2, role: 'it_room' },
       { xMin: -2.8, xMax: 12.5, zMin: -9.8, zMax: -4.0, role: 'portico' }
     ],
@@ -59,7 +60,9 @@ export const ZONES = [
       { xMin: -16.6, xMax: -15.0, zMin: -3.4, zMax: 3.4, role: 'library' },
       { xMin: -9.8, xMax: -4.7, zMin: -6.2, zMax: -4.6, role: 'classroom' },
       { xMin: -4.1, xMax: 3.0, zMin: -6.2, zMax: -4.6, role: 'classroom' },
-      { xMin: 3.8, xMax: 10.8, zMin: -6.2, zMax: -4.6, role: 'it_room' }
+      { xMin: 3.8, xMax: 10.8, zMin: -6.2, zMax: -4.6, role: 'it_room' },
+      { xMin: 18.0, xMax: 22.5, zMin: -6.2, zMax: -4.6, role: 'study' },
+      { xMin: 23.2, xMax: 27.8, zMin: -6.2, zMax: -4.6, role: 'classroom' }
     ],
     sensorPos: { x: 7.2, y: 4.75, z: -10.45 },
     coverSpots: [
@@ -80,7 +83,9 @@ export const ZONES = [
       { xMin: -15.2, xMax: -13.3, zMin: -9.5, zMax: 9.5, role: 'library' },
       { xMin: -9.8, xMax: -4.7, zMin: -6.2, zMax: -4.6, role: 'classroom' },
       { xMin: -4.1, xMax: 3.0, zMin: -6.2, zMax: -4.6, role: 'classroom' },
-      { xMin: 3.8, xMax: 10.8, zMin: -6.2, zMax: -4.6, role: 'it_room' }
+      { xMin: 3.8, xMax: 10.8, zMin: -6.2, zMax: -4.6, role: 'it_room' },
+      { xMin: 18.0, xMax: 22.5, zMin: -6.2, zMax: -4.6, role: 'study' },
+      { xMin: 23.2, xMax: 27.8, zMin: -6.2, zMax: -4.6, role: 'classroom' }
     ],
     sensorPos: { x: -4.0, y: 9.5, z: -6.5 },
     coverSpots: [
@@ -100,7 +105,9 @@ export const ZONES = [
       { xMin: -21.4, xMax: -19.5, zMin: -9.5, zMax: 9.5, role: 'library' },
       { xMin: -9.8, xMax: -4.7, zMin: -6.2, zMax: -4.6, role: 'it_room' },
       { xMin: -4.1, xMax: 3.0, zMin: -6.2, zMax: -4.6, role: 'it_room' },
-      { xMin: 3.8, xMax: 10.8, zMin: -6.2, zMax: -4.6, role: 'classroom' }
+      { xMin: 3.8, xMax: 10.8, zMin: -6.2, zMax: -4.6, role: 'classroom' },
+      { xMin: 18.0, xMax: 22.5, zMin: -6.2, zMax: -4.6, role: 'study' },
+      { xMin: 23.2, xMax: 27.8, zMin: -6.2, zMax: -4.6, role: 'classroom' }
     ],
     sensorPos: { x: -2.0, y: 12.8, z: -7.2 },
     coverSpots: [
@@ -119,7 +126,8 @@ export const ZONES = [
     areas: [
       { xMin: -7.0, xMax: 2.0, zMin: -10.4, zMax: -5.1, role: 'cafeteria' },
       { xMin: -20.5, xMax: -13.5, zMin: -9.8, zMax: 1.8, role: 'terrace' },
-      { xMin: 4.0, xMax: 13.8, zMin: -10.3, zMax: -4.3, role: 'terrace' }
+      { xMin: 4.0, xMax: 13.8, zMin: -10.3, zMax: -4.3, role: 'terrace' },
+      { xMin: 18.0, xMax: 27.5, zMin: -10.0, zMax: -4.4, role: 'terrace' }
     ],
     sensorPos: { x: 5.5, y: 16.0, z: -6.8 },
     coverSpots: [
@@ -135,12 +143,12 @@ export function makeEvacuationRoute(p) {
   const add = (x, y, z) => route.push({ x, y, z });
   const level = Math.max(0, Math.min(4, Math.round((p.y - 0.12) / FLOOR_HEIGHT)));
   if (p.y < -0.4) {
-    add(p.x, -3.4, 10.7);
-    add(-14.9, -3.4, 10.7);
-    add(-14.9, -3.4, 10.4);
-    add(-14.9, 0.12, 5.4);
-    add(-14.9, 0.12, 4.0);
-    add(-11.15, 0.12, 4.0);
+    add(p.x, -3.4, 10.4);
+    add(-20.3, -3.4, 10.4);
+    add(-20.3, -3.4, 10.4);
+    add(-20.3, 0.12, 5.4);
+    add(-20.3, 0.12, 4.8);
+    add(-11.15, 0.12, 4.8);
   } else if (level > 0 && p.x < -12.5 && level <= 3) {
     // Seguir el borde de la biblioteca hasta el descanso, evitando el vacío central.
     const endZ = level % 2 ? -9.6 : 10;
@@ -162,6 +170,13 @@ export function makeEvacuationRoute(p) {
       add(p.x, p.y, -10.2);
       add(-11.5, p.y, -10.2);
       add(-11.5, p.y, -3.45);
+    } else if (p.x > 17.4) {
+      if (level <= 3 && p.z < -4.55) {
+        const door = p.x < 22.9 ? 19.7 : 25.0;
+        add(door, p.y, p.z);
+        add(door, p.y, -3.3);
+      } else add(p.x, p.y, -3.3);
+      add(16.65, p.y, -3.3);
     } else if (level === 4 && p.role === 'cafeteria') {
       add(-2.5, p.y, p.z);
       add(-2.5, p.y, -3.4);
@@ -183,7 +198,11 @@ export function makeEvacuationRoute(p) {
       add(16.65, bottom, -3.3);
     }
   } else if (p.x < -12.5) {
-    add(p.x, 0.12, 4.0);
+    if (p.x < -22.5) {
+      add(p.x, 0.12, 0);
+      add(-21.7, 0.12, 0);
+      add(-21.7, 0.12, 4.0);
+    } else add(p.x, 0.12, 4.0);
     add(-11.15, 0.12, 4.0);
   } else if (p.z < -4.55 && p.x < -4.8) {
     add(-8.4, 0.12, p.z);
@@ -255,7 +274,7 @@ export const RUBBLE_POCKETS = [
   {
     id: 'rubble_sub_aud',
     zone: 'S',
-    x: -14.9,
+    x: -20.3,
     y: -3.4,
     z: 8.9,
     label: 'Acceso Auditorio Subterráneo (-1)',
@@ -275,11 +294,21 @@ const VENDOR_OUIS = [
 // Conversaciones universitarias inteligentes y naturales por espacio del CyT (CERO menciones al operador o al Gateway)
 const DIALOGUES_BY_ROLE = {
   auditorium: [
+    ["¿Alcanzaste a inscribirte al seminario?", "Sí, y le guardé puesto a la compañera."],
+    ["¿La charla empieza a las dos?", "Eso dijo el profe, apenas termine de instalar el video."],
+    ["Me gustó la pregunta del compañero.", "Sí, dio para pensar el problema de otra manera."],
+    ["¿Tomaste apuntes de la presentación?", "Claro, después te comparto el resumen."],
     ['En la proyección se ve clarísimo el espectro modal del pórtico.', 'Sí, anota la frecuencia natural que el profe dijo que entra en el taller.'],
     ['¿Alcanzaste puesto con conector acá abajo en el auditorio?', 'Casi no, este auditorio del CyT siempre se llena en cátedra de facultad.'],
     ['La acústica de madera de este auditorio subterráneo aísla todo el ruido de afuera.', 'Total, ni se siente cuando pasa gente por la plazoleta.']
   ],
   library: [
+    ["¿Te falta mucho para entregar la tesis?", "Un poquito; hoy cierro las referencias."],
+    ["Ese libro sí está bueno para el taller.", "Lo voy a buscar en el catálogo, gracias."],
+    ["Hablemos bajito, que están estudiando.", "Uy, sí, se me olvidó que estamos en biblioteca."],
+    ["¿Te prestaron el cargador?", "Sí, menos mal; el mío se quedó en la casa."],
+    ["¿Nos vemos después de clase?", "Listo, en la plazoleta, tipo cuatro."],
+    ["¿Encontraste un artículo más reciente?", "Sí, el de la revista está en acceso abierto."],
     ['¿Me guardas el puesto un momentico? Voy por el libro.', 'De una, pero vuelve rápido que esto se está llenando.'],
     ['¿Ya miraste si el SINAB tiene el texto en línea?', 'Sí, parce, ahí está; te paso el enlace después.'],
     ['¿Conseguiste el libro de ecuaciones diferenciales en la colección general?', 'Estaba prestado, pero descargué el artículo desde las bases del SINAB.'],
@@ -287,6 +316,12 @@ const DIALOGUES_BY_ROLE = {
     ['¿Probaste la simulación numérica en los computadores del costado occidental?', 'Ya corrió, convergió en cuarenta iteraciones sin desbordar memoria.']
   ],
   classroom: [
+    ["¿El trabajo es en parejas o en grupos?", "En grupos de tres, según el aula virtual."],
+    ["¿Me prestas un esfero, porfa?", "Claro, tengo uno de sobra en la maleta."],
+    ["Ese ejercicio está una chimba de difícil.", "Jajaja, hagámoslo paso a paso y sale."],
+    ["¿Hoy sí hay quiz?", "El profe dijo que posiblemente, repasemos."],
+    ["¿Alcanzaste a imprimir la guía?", "No, pero la tengo descargada en el celular."],
+    ["Qué aguacero cayó esta mañana.", "Típico de Bogotá, salí con sol y volví empapado."],
     ['¿Qué más, parce? ¿Sí entendiste el último ejercicio?', 'Más o menos, repasémoslo antes del parcial.'],
     ['Uy, qué jornada tan larga. ¿Vamos por un tinto?', 'De una, pero primero terminemos el trabajo.'],
     ['El parcial de Algoritmos estuvo exigente con la parte de programación dinámica.', 'Menos mal repasamos complejidad asintótica antes de subir al salón.'],
@@ -294,11 +329,21 @@ const DIALOGUES_BY_ROLE = {
     ['Mira cómo planteó el tensor de esfuerzos en el tablero.', 'Tómale foto antes de que borre esa demostración.']
   ],
   it_room: [
+    ["¿Ya guardaste los cambios del código?", "Sí, hice una copia antes de probar."],
+    ["La red estuvo lenta hace un rato.", "Ya volvió; revisemos que el archivo haya subido."],
+    ["¿Te corrió la simulación?", "Sí, pero quiero revisar los resultados con calma."],
+    ["¿Me ayudas con este error?", "De una, miremos primero el mensaje completo."],
+    ["Falta documentar las conexiones.", "Yo hago el diagrama mientras tú pruebas el programa."],
     ['El clúster de Linux de esta sala compila muchísimo más rápido que mi portátil.', 'Obvio, tiene todos los núcleos libres y conexión cableada al nodo de red.'],
     ['Me está dando conflicto de paquetes en el entorno virtual de Python.', 'Limpia el caché y vuelve a correr el script de entrenamiento.'],
     ['El aire acondicionado del cuarto de servidores siempre está helado.', 'Mejor así, ayer los switches de distribución estaban a tope de tráfico.']
   ],
   cafeteria: [
+    ["¿Una aromática o un tinto?", "Tinto, por favor, que todavía queda clase."],
+    ["¿Te guardo la mesa mientras haces fila?", "Sí, muchas gracias, ya vuelvo."],
+    ["Hoy el almuerzo estuvo bueno.", "Sí, y alcanzamos a comer antes de laboratorio."],
+    ["¿Pedimos una empanada para compartir?", "Dale, y de paso traemos agua."],
+    ["¿A qué hora entregamos el informe?", "Antes de medianoche, pero mejor no dejarlo para última hora."],
     ['¿Qué hay de almuerzo hoy?', 'Hay corrientazo y también una opción vegetariana.'],
     ['¿Trajiste saco? Afuera está haciendo un frío bravo.', 'Sí, y por si acaso también traje sombrilla.'],
     ['Qué buena vista del campus se tiene desde la cafetería del último piso.', 'Es el mejor parche del CyT, sobre todo acá bajo la pérgola cubierta.'],
@@ -306,15 +351,27 @@ const DIALOGUES_BY_ROLE = {
     ['Menos mal esta parte de la terraza tiene techo, parecía que iba a llover hacia los cerros.', 'Típico clima de Bogotá: sol en la plazoleta y nubes en Monserrate.']
   ],
   terrace: [
+    ["Qué bonito está el campus hoy.", "Sí, aprovechemos el sol antes de que llueva."],
+    ["¿Ya terminaste el almuerzo?", "Sí, voy a recoger la basura y nos vamos."],
+    ["¿Nos sentamos un ratico acá?", "Dale, todavía tenemos tiempo antes de clase."],
+    ["Desde acá se ven los árboles del campus.", "Y los cerros también, cuando despeja."],
+    ["Uy, se levantó viento.", "Ponte el saco, que Bogotá cambia de clima rápido."],
     ['Salir a tomar aire acá en la terraza abierta despeja la mente después de cálculo.', 'Total, desde aquí se alcanza a ver toda la arboleda hacia Química e Ingeniería.'],
     ['¿Repasamos las diapositivas de la sustentación aquí afuera?', 'Dale, tú empiezas con el marco teórico y yo explico los resultados experimentales.']
   ],
   study: [
+    ["¿Con cuál ejercicio arrancamos?", "Con el primero y luego revisamos el resultado."],
+    ["¿Ya viste las notas del taller?", "Todavía no, las reviso en un rato."],
+    ["¿Te sirvió estudiar con el grupo?", "Sí, entre todos salió más fácil."],
     ['¿Nos repartimos los ejercicios?', 'Listo, yo hago los dos primeros y luego comparamos.'],
     ['Revisemos los planos del circuito antes de subir por la rampa al segundo piso.', 'Listo, ya verifiqué las tierras y el regulador de voltaje.'],
     ['¿Nos vemos en las mesas de primer piso o subimos a biblioteca?', 'Terminemos el resumen acá abajo y ahorita subimos por la rampa exterior.']
   ],
   portico: [
+    ["¿Vas para clase?", "Sí, me encuentro con el grupo arriba."],
+    ["¿Nos esperamos aquí?", "Dale, la compañera ya viene en camino."],
+    ["¿Te queda tiempo para un café?", "Un momentico, antes de subir al salón."],
+    ["¿Trajiste paraguas?", "Sí, esta mañana estaba haciendo sol pero ya se nubló."],
     ['¿Vas para las aulas del tercer piso o para el auditorio subterráneo?', 'Voy bajando al auditorio que en cinco minutos empieza el seminario.'],
     ['Qué fresco corre el viento aquí debajo de las columnas del primer piso.', 'Sí, el diseño abierto hacia la plazoleta funciona súper bien.']
   ]
@@ -1496,30 +1553,34 @@ export class LPSBoxSimulation {
     if (this._speechCycleTimer <= 0) {
       this._speechCycleTimer = this.quakeActive ? 1.55 : 3.4;
       this._dialogueTurnIndex++;
-      const maxVisible = this.quakeActive ? 7 : 5;
+      const maxVisible = this.quakeActive ? 10 : 9;
       const candidates = [...this.people].sort(() => Math.random() - 0.5);
       let shown = 0;
       let alertUrgency = null;
       let alertSeed = 0;
 
-      // Mantener conversaciones de pareja alternando pregunta y respuesta en modo normal
+      // Un diálogo coherente por pareja: pregunta, respuesta y luego un tema nuevo.
+      // Se alternan grupos para no repetir el mismo globo permanentemente.
       if (!this.quakeActive && this.scenario === 'normal') {
-        this.people.forEach((p) => { p.speechVisible = false; });
-        for (const p of candidates) {
-          if (shown >= maxVisible) break;
-          if (p.partnerId) {
-            const partner = this.people.find((x) => x.id === p.partnerId);
-            const speaker = this._dialogueTurnIndex % 2 === 0 ? p : (partner || p);
-            speaker.speechVisible = true;
-            speaker.phrase = speaker.basePhrase;
-            speaker.speechUrgency = 'normal';
-            shown++;
-          } else if (Math.random() < 0.45) {
-            p.speechVisible = true;
-            p.phrase = p.basePhrase;
-            p.speechUrgency = 'normal';
-            shown++;
-          }
+        this.people.forEach(p => { p.speechVisible = false; });
+        const groups = this.people.filter(p => !p.partnerId || p.id < p.partnerId);
+        const visible = Math.min(9, groups.length);
+        const start = groups.length ? (Math.floor((this._dialogueTurnIndex - 1) / 2) * visible) % groups.length : 0;
+        const usedPhrases = new Set();
+        for (let i = 0; i < groups.length && shown < visible; i++) {
+          const leader = groups[(start + i) % groups.length];
+          const partner = this.people.find(other => other.id === leader.partnerId);
+          const pool = DIALOGUES_BY_ROLE[leader.role] || DIALOGUES_BY_ROLE.study;
+          const turn = (this._dialogueTurnIndex - 1) % 2;
+          const dialogueIndex = (Math.floor((this._dialogueTurnIndex - 1) / 2) + leader.id * 3) % pool.length;
+          const speaker = turn && partner ? partner : leader;
+          const phrase = pool[dialogueIndex][turn && partner ? 1 : 0];
+          if (usedPhrases.has(phrase)) continue;
+          usedPhrases.add(phrase);
+          speaker.phrase = phrase;
+          speaker.speechUrgency = 'normal';
+          speaker.speechVisible = true;
+          shown++;
         }
       } else {
         candidates.forEach((p) => {
