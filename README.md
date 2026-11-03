@@ -1,75 +1,35 @@
-# LPSBOX System — Simulador VR / MR de Emergencia Sísmica (Edificio 4 Pisos)
+# LPSBOX · Simulador sísmico inspirado en CyT UNAL
 
-En este repositorio se encuentra el **simulador y juego interactivo 3D / WebXR (Realidad Virtual y Realidad Mixta)** donde se recrea un escenario urbano y estructural de **4 pisos** para probar en conjunto el **Nodo Sniffer sobre Raspberry Pi 5 + MPU6050 (interior)** y el **LPSBOX Gateway montado en un Poste de Luz (exterior)**, junto con los artefactos de diseño industrial (`modelo3d.stl`, bocetos originales y rediseños asistidos por IA).
+Simulador educativo 3D y WebXR para explorar un escenario de emergencia, el **Sniffer RPi 5 + MPU6050 interior** y un **Gateway exterior en un poste**. Es un sitio estático compatible con [GitHub Pages](https://juanf14-ui.github.io/Game-for-LPSBOX-System/).
 
-🔗 **Ejecución directa en GitHub Pages:**  
-`https://juanf14-ui.github.io/Game-for-LPSBOX-System/`
+## Escenario
 
----
+La construcción es una **interpretación aproximada**, no un levantamiento ni plano oficial del edificio 454 de la Universidad Nacional de Colombia en Bogotá. Se usaron referencias públicas: [bibliotecas UNAL](https://bibliotecas.unal.edu.co/sede-bogota/acerca-de/bibliotecas-en-la-sede), [descripción institucional](http://historico.cartauniversitaria.unal.edu.co/ediciones/38/03carta.html) y fotografías públicas del edificio. La distribución concreta de habitaciones, medidas, accesos y derrumbes es una propuesta de juego y no representa necesariamente el edificio real.
 
-## 1. Arquitectura Física del Sistema LPSBOX y Rol del Operario
+A partir también de las fotografías compartidas se ajustaron la fachada posterior, barandas, rampas, acristalamientos y el auditorio. Se recrean la plazoleta, dos alas en L, fachada clara y cortasoles, rampas exteriores, biblioteca con vacío central, aulas, cuartos TI, baños, cafetería parcialmente cubierta y terraza descubierta. Hay una interpretación de auditorio subterráneo cerca del acceso. Las ubicaciones de hardware son ficticias. El modelo y la simulación **no son un plan de evacuación ni deben utilizarse para decisiones de rescate reales**.
 
-Cuando ocurre un terremoto en una edificación de varios pisos, el colapso de plafones, estanterías y el corte eléctrico dejan incomunicadas a las personas atrapadas en segundos. **LPSBOX** separa físicamente la detección interior del resguardo exterior de los datos:
+## Cómo jugar
 
-1. **Nodo Sniffer Interior (`modelo3d.stl` — Raspberry Pi 5 + Detector Sísmico MPU6050):**
-   - Instalado dentro del edificio (**Piso 2 — Laboratorio de Electrónica**).
-   - La **Raspberry Pi 5** ejecuta tanto el escaneo pasivo de *WiFi 802.11 / BLE Probe Requests* (con filtro de aleatorización de direcciones MAC en ventanas deslizantes de **10 segundos** y estimación multinivel por atenuación de losa) como el algoritmo sísmico **`STA/LTA`** sobre el acelerómetro **`MPU6050`**, activando su pantalla frontal completa (`ALERTA / Enviando datos`) y alarma de voz.
-2. **LPSBOX Gateway Exterior (En Poste de Alumbrado Público a 4.65 m):**
-   - Caja resistente minimalista **sin pantalla**, provista de **3 LEDs físicos de estado** (**Azul** = sin alerta, **Mini LED titilante** = recibiendo paquetes, **Amarillo** = captura pre-sismo `t₀` almacenada) y puertos `microSD` / `USB-C`.
-   - Ubicada afuera en un **poste de luz** fuera del radio de caída estructural. Para extraer los registros, **el operario debe primero accionar la polea del poste (`[B]` o clic en el poste 3D) para bajar el Gateway de `4.65 m` a `1.18 m`** y luego conectar el cable `USB-C` (`[E]`).
+1. Pulsa **Iniciar experiencia** y elige monitoreo o un sismo. En escritorio, el modo operario usa WASD, ratón, Espacio, Shift, C y F; también está disponible la vista libre y el modo táctil.
+2. Tras el sismo, baja el Gateway con **B** o con su botón de polea. Cuando llegue a 1,18 m, pulsa **E** o **Extraer datos** para consultar el registro en la consola.
+3. Revisa los dispositivos estimados en el momento `t₀`, incluido el auditorio y la cafetería. Completa el total, cada nivel y la prioridad de búsqueda para enviar el informe. La comparación posterior es parte del juego: señales y ubicaciones son sintéticas, no mediciones reales.
+4. Al terminar cada sismo llega una ambulancia y un camión de bomberos con personal de respuesta. En PC aparece una cinemática de 12 segundos que se puede saltar; los vehículos y el personal permanecen en el escenario. En VR llegan sin mover la cámara del visor.
+5. En el escenario catastrófico se muestran personas atrapadas bajo escombros y el Sniffer dañado; el registro previo queda en el Gateway. Los NPC usan gestos, globos de diálogo y efectos no verbales, sin voz hablada.
 
----
+### Realidad virtual
 
-## 2. Características Principales del Simulador 3D / WebXR
+En un navegador y visor compatibles con WebXR, abre **Entrar VR** en HTTPS. El stick izquierdo desplaza al jugador sin salir del área física; el derecho gira por pasos. El gatillo permite apuntar a superficies o botones y Grip centra el panel. El panel ofrece visitas al auditorio, niveles, Sniffer y Gateway, así como los escenarios. Baja el Gateway mediante **Polea Poste** y abre **Datos Gateway**. En la consola 3D, usa `−` / `+` para editar cada nivel, **Prioridad** para elegir la zona y **Enviar** para evaluar el informe sin quitarte el visor. El conteo total se calcula como suma de niveles.
 
-- **Edificio de Prueba de 4 Pisos + Entorno Urbano:**
-  - **Piso 1:** Cafetería & Lobby Principal · **Piso 2:** Laboratorio de Electrónica & Nodo Sniffer RPi 5 · **Piso 3:** Sala de Servidores & Telecom · **Piso 4:** Auditorio & Sala de Proyectos, conectados por una **escalera de emergencia acristalada** hacia el punto de encuentro exterior.
-  - Deriva sísmica modal por altura (los pisos superiores oscilan con mayor amplitud que la planta baja).
-- **Físicas Sólidas del Operario y Modo Vista Libre 360°:**
-  - En modo **`🚶 Operario Físico [P]`**, el jugador camina con **gravedad, salto (`Espacio`), carrera (`Shift`), agacharse (`C`), linterna táctica (`L`) y colisiones reales** contra muros, fachadas, barandas de vidrio, columnas, muebles, poste exterior y escombros. Puede subir y bajar caminando por la **escalera en U de los 4 pisos hasta la azotea** y **empujar físicamente objetos dinámicos (`[F]` o al caminar sobre ellos)**.
-  - En modo **`🛸 Vista Libre 360° [V]`**, dispone de vuelo libre 6-DOF sin restricciones para inspeccionar todo el edificio, interiores, escombros y azotea desde cualquier ángulo.
-- **Escenario de Colapso Estructural Grave (`7.8 Mw`) y Sniffer Bajo Escombros:**
-  - En **`💥 Colapso Estructural Grave (7.8 Mw, 27.5 s)`**, secciones de losas y vigas de los pisos superiores colapsan progresivamente dejando personas atrapadas pidiendo rescate, y en la Etapa 2 una viga reforzada del Piso 3 cae sobre el **Sniffer RPi 5 del Piso 2**, fracturando su pantalla OLED, cortando su telemetría en vivo y dejándolo **sepultado bajo escombros** — demostrando por qué resguardar el snapshot pre-sismo `t₀` en el **Gateway del poste exterior** es vital.
-- **NPCs Articulados con Voz Hablada + Globos de Texto:**
-  - Las personas dentro del edificio cuentan con **síntesis de voz en español sincronizada con sus globos de diálogo** (con variaciones de tono por personaje y urgencia, activable/silenciable con `🗣️ Voces NPC`), reaccionando de forma realista ante monitoreo normal, sismo leve (`4.2 Mw`), terremoto fuerte (`6.9 Mw`) y atrapamiento por colapso (`7.8 Mw`).
-- **Física de Objetos que Caen y Oscilan:**
-  - Lámparas colgantes con péndulo y chispazos eléctricos, monitores, tazas, libros, macetas, cuadros de pared, proyectores, placas de plafón acústico y vuelco de libreros/racks de servidores según la aceleración del piso.
-- **Registro Visual Completo y Persistente de Ondas Sísmicas:**
-  - Tanto en el HUD 3D como en la Consola del Gateway puedes alternar entre **`📈 Evento Completo`** y **`🔴 En Vivo`**. El sismograma conserva toda la traza del evento e incluye el marcador exacto de corte cuando el Sniffer queda sepultado bajo escombros junto con la curva punteada del movimiento real del suelo.
-- **Pantalla del Sniffer `modelo3d.stl` Calibrada al 100%:**
-  - La pantalla OLED dinámica cubre exactamente el marco frontal completo del modelo 3D (`modelo3d.stl`, 50,000 triángulos), mostrando además grietas y fallo crítico cuando sufre daño bajo escombros.
+La disponibilidad y el comportamiento de WebXR dependen del navegador y del visor. El modo inmersivo debe probarse en el dispositivo de destino.
 
----
+## Desarrollo y rendimiento
 
-## 3. Controles Rápidos (Escritorio, Controles Táctiles y Realidad Virtual WebXR)
-
-- **`▶ INICIAR EXPERIENCIA COMO OPERARIO`**: Botón principal de arranque inmediato (o inicio directo con Sismo Pequeño, Terremoto Fuerte o Colapso Grave `7.8 Mw`).
-- **`📱 Táctil` (Controles Táctiles en Pantalla)**: Activa los **joysticks virtuales analógicos duales** (mover/volar + mirar 360°), botones táctiles de acción (`Saltar`, `Agachar`, `Empujar`, `Poste`, `Extraer`, `Libre/Físico`) y barra superior de salto rápido a **Pisos 1–4, Azotea, Sniffer y Gateway**.
-- **`🥽 Entrar VR` (Realidad Virtual WebXR sin depender del espacio físico *Guardian*)**:
-  - **Stick Izquierdo**: Caminar con colisiones reales y subir escaleras (o volar libremente en *Modo Vuelo VR*) sin mover tus pies del límite físico de las gafas.
-  - **Stick Derecho**: Giro cómodo por pasos (*Snap Turn* `45°`) y elevación vertical en modo vuelo.
-  - **Gatillo (`Trigger`) apuntando al suelo / losas**: Teletransporte instantáneo a cualquier punto o piso.
-  - **Panel Táctico 3D dentro de VR (`Grip` o botón de muñeca `📋 MENÚ VR`)**: Botones flotantes interactivos con puntero láser para ir directo a **Piso 1, Piso 2, Piso 3, Piso 4, Azotea, Sniffer RPi 5, Poste & Gateway y Vista Exterior**, accionar la polea del poste, abrir la **Consola Holográfica VR de datos `t₀`** y disparar los sismos sin quitarte el visor.
-- **Tecla `P` (`🚶 Operario Físico`)**: Caminar con físicas y colisiones reales (`WASD` moverse · `Shift` correr · `Espacio` saltar · `C` agacharse · `F` empujar objetos · `L` linterna táctica).
-- **Tecla `V` (`🛸 Vista Libre 360°`)**: Vuelo libre 3D por todo el escenario (`WASD` volar · `Espacio` subir · `C`/`Q` bajar · `Shift` turbo).
-- **Tecla `B` o clic en el Poste de Luz**: Bajar / subir mecánicamente el **LPSBOX Gateway** del poste exterior (`4.65 m ↔ 1.18 m`).
-- **Tecla `E` o botón `Extraer Datos`**: Conectar por USB-C al Gateway (requiere haber bajado antes el Gateway del poste).
-- **Tecla `G`**: Simular un golpe físico directo sobre el acelerómetro `MPU6050` de la Raspberry Pi 5 (onda de choque MR).
-
----
-
-## 4. Puente en Vivo con Raspberry Pi 5 (`python_rpi5_bridge/`)
-
-```text
-[INTERIOR PISO 2: SNIFFER RASPBERRY PI 5 + MPU6050]        [EXTERIOR EN POSTE DE LUZ (4.65 m): LPSBOX GATEWAY]
- ├─ WiFi/BLE Probe Requests + Filtro MAC Aleatoria (10s)    ├─ Receptor inalámbrico fuera de zona de colapso
- ├─ Muestreo I2C MPU6050 + Disparo STA/LTA + Onda Completa  ├─ 3 LEDs Físicos (Azul / Mini Blink / Amarillo)
- └─ MQTT (:1883) / WebSocket (:8765) ─────────────────────► └─ Descenso por polea (1.18 m) + Extracción USB-C
+```sh
+python3 -m http.server 8080
+# Abrir http://localhost:8080/ desde la raíz de este repositorio
+node --test tests/*.test.mjs
 ```
 
-Para enlazar una **Raspberry Pi 5** real o probar telemetría sintética en vivo:
-```bash
-pip install smbus2 gpiozero paho-mqtt websockets
-python3 python_rpi5_bridge/rpi5_lpsbox_bridge.py --demo
-```
-Luego abre la pestaña **«📘 Pitch MR & Arquitectura RPi5»** e ingresa `ws://<IP-DE-TU-RPI5>:8765`.
+El sitio usa Three.js incluido localmente y texturas procedurales; no requiere una compilación para Pages. `js/cytBuilding.js` agrupa objetos repetidos con `InstancedMesh`, y se limita la resolución de píxel y de sombras para reducir la carga. La fluidez depende de la GPU, resolución y visor; **60 FPS no están garantizados**. Las pruebas de simulación no sustituyen una prueba visual en navegador ni una prueba de WebXR con un visor físico.
+
+El puente opcional `python_rpi5_bridge/rpi5_lpsbox_bridge.py` conserva el modo de demostración de telemetría. Las estimaciones de presencia, RSSI y la deduplicación en el juego son modelos simplificados y no establecen un conteo fiable de personas en situaciones reales.

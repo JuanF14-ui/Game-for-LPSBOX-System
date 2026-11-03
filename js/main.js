@@ -20,6 +20,8 @@ const stlText = document.getElementById('stl-loading-text');
 const navTabs = document.querySelectorAll('.nav-tab');
 const simHud = document.getElementById('sim-hud');
 const bottomTicker = document.getElementById('bottom-ticker');
+const cinematicBanner = document.getElementById('response-cinematic');
+const skipCinematicButton = document.getElementById('btn-skip-cinematic');
 const viewConsole = document.getElementById('view-console');
 const viewDocs = document.getElementById('view-docs');
 const viewGallery = document.getElementById('view-gallery');
@@ -106,7 +108,7 @@ const chkMacFilter = document.getElementById('chk-mac-filter');
 const rssiCanvas = document.getElementById('rssi-map-canvas');
 const rssiCtx = rssiCanvas ? rssiCanvas.getContext('2d') : null;
 
-const zoneInputs = ['a', 'b', 'c', 'd'].map((k) => document.getElementById(`inp-zone-${k}`));
+const zoneInputs = ['s', 'a', 'b', 'c', 'd', 'e'].map((k) => document.getElementById(`inp-zone-${k}`));
 const zoneSumHelper = document.getElementById('zone-sum-helper');
 const lightbox = document.getElementById('img-lightbox');
 const lightboxImg = document.getElementById('lightbox-img');
@@ -158,32 +160,21 @@ sim = new LPSBoxSimulation({
     if (experienceStarted) {
       const alarmSev = snap.scenario === 'catastrophic' ? 'catastrophic' : snap.scenario === 'major' ? 'major' : 'mild';
       sound.startSnifferAlarm(alarmSev);
-      if (snap.scenario === 'catastrophic') {
-        sound.speakSnifferVoice(
-          'Emergencia crítica siete punto ocho. Conteo pre-sismo transmitido al Gateway del poste exterior antes de posible colapso.'
-        );
-      } else if (snap.scenario === 'major') {
-        sound.speakSnifferVoice(
-          'Alerta sísmica severa en edificio. Enviando conteo de los cuatro pisos al Gateway del poste exterior. Evacúen por la escalera.'
-        );
-      } else {
-        sound.speakSnifferVoice(
-          'Sismo leve detectado por Raspberry Pi cinco. Mantengan la calma, enviando registro preventivo al poste.'
-        );
-      }
+
     }
     if (elBtnToggleHolo) elBtnToggleHolo.style.display = 'inline-flex';
     setSeismoMode('event');
     refreshConsoleData();
   },
-  onNpcSpeak: (person, text, urgency) => {
-    if (!experienceStarted) return;
-    let dist = 10;
-    if (scene3d?.camera) {
-      const cp = scene3d.camera.position;
-      dist = Math.hypot(cp.x - person.x, cp.y - ((person.y || 0) + 1.4), cp.z - person.z);
-    }
-    sound.speakNpcDialogue(person, text, urgency, dist);
+  onQuakeEnded: () => {
+    if (!experienceStarted || !scene3d) return;
+    sound.stopAlarmLoop();
+    scene3d.startEmergencyResponse(activeView === 'sim');
+    sound.playEmergencySiren();
+    appendLogEntry({ time: sim.time, text: '🚑🚒 Ambulancia y bomberos se aproximan al edificio.', level: 'info' });
+  },
+  onNpcVocalAlert: (urgency, seed) => {
+    if (experienceStarted) sound.playNpcScream(urgency, seed);
   },
   onStructuralCollapseStage: (stage) => {
     if (experienceStarted) {
@@ -231,6 +222,11 @@ syncPoleUI();
 
 try {
   scene3d = new LPSBoxScene3D(canvasContainer, sim, {
+    onCinematicChange: (active) => {
+      if (cinematicBanner) cinematicBanner.hidden = !active;
+      document.body.classList.toggle('cinematic-active', active);
+    },
+    onResponseEnd: () => sound.stopEmergencySiren(),
     onGatewayClick: () => openGatewayExtraction(),
     onPoleClick: () => handlePoleToggleAction(),
     onSnifferClick: () => {
@@ -289,10 +285,10 @@ try {
     },
     onStlReady: () => {
       if (stlText) {
-        stlText.textContent = '✓ Malla ./modelo3d.stl cargada (50,000 tris) + Pantalla calibrada al 100%';
+        stlText.textContent = '✓ Modelo Sniffer cargado';
       }
       if (startStlStatus) {
-        startStlStatus.textContent = '● MODELO 3D ./modelo3d.stl LISTO · EDIFICIO 4 PISOS ACTIVO';
+        startStlStatus.textContent = '● SNIFFER LISTO · ESCENARIO CYT';
       }
       setTimeout(() => {
         stlBanner?.classList.add('hidden');
@@ -331,7 +327,7 @@ function startExperience(initialScenario = null) {
 
   appendLogEntry({
     time: sim.time,
-    text: 'Experiencia iniciada: Edificio de 4 pisos en monitoreo. Recuerda bajar el Gateway del poste de luz [B] tras un sismo.',
+    text: 'Experiencia iniciada: escenario inspirado en CyT UNAL en monitoreo.',
     level: 'ok'
   });
 
@@ -354,6 +350,7 @@ btnStartCatastrophic?.addEventListener('click', () => startExperience('catastrop
 
 // ================= 3. NAVEGACIÓN DE VISTAS Y POLEA DEL POSTE DE LUZ =================
 function switchView(view) {
+  if (view !== 'sim' && scene3d?.cinematicCameraState) scene3d.skipEmergencyCinematic();
   activeView = view;
   navTabs.forEach((t) => t.classList.toggle('active', t.dataset.view === view));
 
@@ -471,6 +468,8 @@ function openGatewayExtraction() {
     // Inside VR headset: display the 3D Holographic Gateway Console right in front of the user!
     scene3d.vrConsoleOpen = true;
     if (scene3d.vrDataBoard) scene3d.vrDataBoard.visible = true;
+    scene3d.vrConsoleButtons?.forEach(btn => { btn.visible = true; });
+    scene3d.summonVrMenuInFront(-0.2, true);
     scene3d._updateVrDataBoardCanvas();
     refreshConsoleData();
   } else {
@@ -508,6 +507,8 @@ window.addEventListener('keydown', (e) => {
   }
 });
 
+skipCinematicButton?.addEventListener('click', () => scene3d?.skipEmergencyCinematic());
+
 // ================= 4. COLAPSABLES DEL HUD =================
 document.querySelectorAll('[data-collapse]').forEach((btn) => {
   btn.addEventListener('click', () => {
@@ -523,13 +524,6 @@ btnAudio?.addEventListener('click', () => {
   sound.ensureContext();
   sound.setMuted(!sound.muted);
   btnAudio.textContent = sound.muted ? '🔇 Silenciado' : '🔊 Audio';
-});
-
-btnNpcVoices?.addEventListener('click', () => {
-  sound.ensureContext();
-  const enabled = sound.setNpcVoicesEnabled(!sound.npcVoicesEnabled);
-  btnNpcVoices.textContent = enabled ? '🗣️ Voces NPC' : '🤐 Voces OFF';
-  btnNpcVoices.classList.toggle('voice-off', !enabled);
 });
 
 async function toggleWebXR() {
@@ -1323,7 +1317,7 @@ function updateHudTelemetry() {
     } else {
       elOledBox.className = 'sniffer-oled state-normal';
       elOledTitle.textContent = 'MONITOREO';
-      elOledSub.textContent = `4 Pisos · Ventana 10s: ${sim.rollingProbes.length} tramas`;
+      elOledSub.textContent = `Niveles · Ventana 10s: ${sim.rollingProbes.length} tramas`;
     }
   }
 
@@ -1362,8 +1356,8 @@ function getFloorBandRect(floorNum, w, h) {
   const topMargin = 42;
   const bottomGround = h - 46;
   const totalBldgH = bottomGround - topMargin;
-  const bandH = totalBldgH / 4;
-  const idxFromTop = 4 - floorNum;
+  const bandH = totalBldgH / 6;
+  const idxFromTop = 5 - floorNum;
   return {
     x: 56,
     y: topMargin + idxFromTop * bandH,
@@ -1374,7 +1368,7 @@ function getFloorBandRect(floorNum, w, h) {
 
 function worldToElevationMap(wx, floorNum, w, h) {
   const rect = getFloorBandRect(floorNum, w, h);
-  const normX = Math.max(0.04, Math.min(0.96, (wx - -8.5) / (5.5 - -8.5)));
+  const normX = Math.max(0.04, Math.min(0.96, (wx + 22.5) / 40));
   return {
     x: rect.x + normX * rect.w,
     y: rect.y + rect.h * 0.56
@@ -1419,7 +1413,7 @@ function drawTacticalRssiMap(packets) {
 
   rssiCtx.fillStyle = '#94a3b8';
   rssiCtx.font = 'bold 12px monospace';
-  rssiCtx.fillText('CORTE ARQUITECTÓNICO DE 4 PISOS — TRIANGULACIÓN PRE-SISMO (t₀)', 56, 24);
+  rssiCtx.fillText('NIVELES CYT (RECONSTRUCCIÓN APROXIMADA) — TRIANGULACIÓN PRE-SISMO (t₀)', 56, 24);
 
   // Ground street line
   const groundY = h - 42;
@@ -1513,7 +1507,7 @@ function drawTacticalRssiMap(packets) {
 
   // Plot detected smartphones per floor in t0
   packets.forEach((pkt) => {
-    const floorNum = pkt.estimatedFloor || ZONES.find((z) => z.id === pkt.estimatedZone)?.floor || 1;
+    const floorNum = pkt.estimatedFloor ?? ZONES.find((z) => z.id === pkt.estimatedZone)?.floor ?? 1;
     const jitY = ((pkt.personId % 5) - 2) * 6;
     const pt = worldToElevationMap(pkt.estX, floorNum, w, h);
     const py = pt.y + jitY;
@@ -1614,18 +1608,14 @@ function refreshConsoleData() {
   if (elUnique) elUnique.textContent = String(displayPackets.length);
   if (elSta) elSta.textContent = snap ? snap.triggerStaLta.toFixed(2) : sim.staLtaRatio.toFixed(2);
 
-  const zCounts = { A: 0, B: 0, C: 0, D: 0 };
+  const zCounts = { S: 0, A: 0, B: 0, C: 0, D: 0, E: 0 };
   displayPackets.forEach((pkt) => {
     if (zCounts[pkt.estimatedZone] !== undefined) zCounts[pkt.estimatedZone]++;
   });
   const summaryEl = document.getElementById('zone-rssi-summary');
   if (summaryEl) {
-    summaryEl.innerHTML =
-      `<span><strong>Triangulación por Piso (${applyFilter ? 'Filtrada' : 'Sin filtrar'}):</strong></span>` +
-      `<span style="color:#10b981">Piso 1 (Cafetería): <strong>${zCounts.A}</strong></span>` +
-      `<span style="color:#38bdf8">Piso 2 (Lab/RPi5): <strong>${zCounts.B}</strong></span>` +
-      `<span style="color:#a855f7">Piso 3 (Servidores): <strong>${zCounts.C}</strong></span>` +
-      `<span style="color:#f59e0b">Piso 4 (Auditorio): <strong>${zCounts.D}</strong></span>`;
+    summaryEl.innerHTML = `<span><strong>Dispositivos estimados por nivel:</strong></span>` +
+      ZONES.map(z => `<span style="color:${z.color}">${z.code}: <strong>${zCounts[z.id]}</strong></span>`).join('');
   }
 
   const tbody = document.getElementById('probe-tbody');
@@ -1694,10 +1684,12 @@ function refreshConsoleData() {
         filtered_randomized_macs: randomDuplicateCount,
         unique_smartphones_t0: displayPackets.length,
         floors_t0: {
-          piso_1_cafeteria: zCounts.A,
+          auditorio_subterraneo: zCounts.S,
+          piso_5_cafeteria: zCounts.E,
+          piso_1_acceso: zCounts.A,
           piso_2_lab_rpi5: zCounts.B,
           piso_3_servidores: zCounts.C,
-          piso_4_auditorio: zCounts.D
+          piso_4_computo: zCounts.D
         }
       }
     };
@@ -1709,7 +1701,7 @@ function refreshConsoleData() {
 function updateZoneSumHelper() {
   const sum = zoneInputs.reduce((acc, inp) => acc + Number(inp?.value || 0), 0);
   if (zoneSumHelper) {
-    zoneSumHelper.textContent = `Suma actual ingresada por pisos (P1+P2+P3+P4): ${sum} personas`;
+    zoneSumHelper.textContent = `Suma actual ingresada por niveles: ${sum} personas`;
   }
 }
 zoneInputs.forEach((inp) => inp?.addEventListener('input', updateZoneSumHelper));
@@ -1721,6 +1713,8 @@ document.getElementById('operator-report-form')?.addEventListener('submit', (e) 
 
   const totalGuess = Number(document.getElementById('inp-total')?.value || 0);
   const zoneGuesses = {
+    S: Number(document.getElementById('inp-zone-s')?.value || 0),
+    E: Number(document.getElementById('inp-zone-e')?.value || 0),
     A: Number(document.getElementById('inp-zone-a')?.value || 0),
     B: Number(document.getElementById('inp-zone-b')?.value || 0),
     C: Number(document.getElementById('inp-zone-c')?.value || 0),
@@ -1740,7 +1734,7 @@ document.getElementById('operator-report-form')?.addEventListener('submit', (e) 
       evalRes.score >= 85 ? '#34d399' : evalRes.score >= 60 ? '#fbbf24' : '#f87171';
   }
 
-  const zRows = ['A', 'B', 'C', 'D']
+  const zRows = ['S', 'A', 'B', 'C', 'D', 'E']
     .map((z) => {
       const d = evalRes.zoneDetails[z];
       const mark = d.exact ? '✓' : '≠';
@@ -1767,7 +1761,7 @@ document.getElementById('operator-report-form')?.addEventListener('submit', (e) 
   if (elBtnToggleHolo) elBtnToggleHolo.style.display = 'inline-flex';
   appendLogEntry({
     time: sim.time,
-    text: `Reporte de Operario calificado: ${evalRes.score}/100 pts. Hologramas 3D pre-sismo (t₀) activados en los 4 pisos.`,
+    text: `Reporte de Operario calificado: ${evalRes.score}/100 pts. Hologramas 3D pre-sismo (t₀) activados en los niveles.`,
     level: evalRes.score >= 80 ? 'ok' : 'warn'
   });
 });

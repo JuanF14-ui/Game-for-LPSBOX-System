@@ -8,6 +8,8 @@
 import * as THREE from '../vendor/three/three.module.min.js';
 import { OrbitControls } from '../vendor/three/OrbitControls.js';
 import { STLLoader } from '../vendor/three/STLLoader.js';
+import { buildCytCampusAndBuilding } from './cytBuilding.js';
+import { EmergencyResponse } from './emergencyResponse.js';
 import {
   FLOOR_HEIGHT,
   ZONES,
@@ -95,48 +97,27 @@ function makeLabelTexture(title, subtitle, borderColor = '#38bdf8', bgAlpha = 0.
 
 function createSkyTexture() {
   const canvas = document.createElement('canvas');
-  canvas.width = 512;
-  canvas.height = 256;
+  canvas.width = 1024;
+  canvas.height = 512;
   const ctx = canvas.getContext('2d');
-
-  const grad = ctx.createLinearGradient(0, 0, 0, 256);
-  grad.addColorStop(0.0, '#040814');
-  grad.addColorStop(0.42, '#0b1730');
-  grad.addColorStop(0.72, '#162b4d');
-  grad.addColorStop(0.9, '#1e3a5f');
-  grad.addColorStop(1.0, '#09111f');
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, 512, 256);
-
-  // Subtle stars in upper twilight sky
-  ctx.fillStyle = 'rgba(226, 232, 240, 0.65)';
-  for (let i = 0; i < 90; i++) {
-    const sx = (i * 73) % 512;
-    const sy = (i * 41) % 115;
-    const sr = (i % 3 === 0) ? 1.4 : 0.9;
-    ctx.fillRect(sx, sy, sr, sr);
+  const sky = ctx.createLinearGradient(0, 0, 0, 512);
+  sky.addColorStop(0, '#4b8dbd');
+  sky.addColorStop(0.48, '#a8cfe5');
+  sky.addColorStop(0.75, '#dbe9ed');
+  sky.addColorStop(1, '#cbdccf');
+  ctx.fillStyle = sky;
+  ctx.fillRect(0, 0, 1024, 512);
+  // Nubes suaves de la sabana, pintadas una vez; sin partículas por cuadro.
+  for (let i = 0; i < 21; i++) {
+    const x = (i * 137 + 50) % 1024;
+    const y = 50 + (i * 47) % 230;
+    const radius = 35 + (i % 5) * 12;
+    const cloud = ctx.createRadialGradient(x, y, 0, x, y, radius);
+    cloud.addColorStop(0, 'rgba(255,255,255,0.42)');
+    cloud.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = cloud;
+    ctx.fillRect(x - radius, y - radius, radius * 2, radius * 2);
   }
-
-  // Distant city skyline silhouette near horizon
-  ctx.fillStyle = 'rgba(7, 13, 25, 0.85)';
-  let bx = 0;
-  let seed = 17;
-  while (bx < 512) {
-    seed = (seed * 31 + 13) % 97;
-    const bw = 12 + (seed % 22);
-    const bh = 16 + ((seed * 7) % 42);
-    ctx.fillRect(bx, 224 - bh, bw - 1, bh + 32);
-    // Tiny lit windows
-    ctx.fillStyle = 'rgba(251, 191, 36, 0.28)';
-    for (let wy = 224 - bh + 5; wy < 218; wy += 7) {
-      for (let wx = bx + 3; wx < bx + bw - 4; wx += 5) {
-        if ((wx + wy) % 3 === 0) ctx.fillRect(wx, wy, 2, 3);
-      }
-    }
-    ctx.fillStyle = 'rgba(7, 13, 25, 0.85)';
-    bx += bw;
-  }
-
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
@@ -215,21 +196,21 @@ export class LPSBoxScene3D {
     this.mrVisionEnabled = true;
 
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x070d19);
-    this.scene.fog = new THREE.FogExp2(0x070d19, 0.011);
+    this.scene.background = new THREE.Color(0xb8d7e8);
+    this.scene.fog = new THREE.FogExp2(0xb8d7e8, 0.0035);
 
     const w = container.clientWidth || window.innerWidth;
     const h = container.clientHeight || window.innerHeight;
 
     this.camera = new THREE.PerspectiveCamera(50, w / h, 0.1, 180);
-    this.camera.position.set(1.5, 13.8, 25.5);
+    this.camera.position.set(18, 22, 37);
 
     try {
       this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
     } catch (_) {
       this.renderer = new THREE.WebGLRenderer({ antialias: false });
     }
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
     this.renderer.setSize(w, h);
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -244,7 +225,7 @@ export class LPSBoxScene3D {
     this.controls.maxPolarAngle = Math.PI * 0.492;
     this.controls.minDistance = 0.9;
     this.controls.maxDistance = 54;
-    this.controls.target.set(0.2, 5.6, 1.2);
+    this.controls.target.set(-3, 6, -2);
     this.controls.autoRotate = true;
     this.controls.autoRotateSpeed = 0.55;
     this.introOrbitActive = true;
@@ -344,15 +325,20 @@ export class LPSBoxScene3D {
     this._crashSoundCooldown = 0;
 
     this._setupSkyAndLights();
-    this._buildUrbanExterior();
-    this._buildFourStoryBuilding();
-    this._buildStairwellTower();
-    this._buildRooftop();
+    this.supportSlabs = [];
+    this.supportRamps = [];
+    this.cytProps = [];
+    this.hvacFans = [];
+    this.cytBuilding = buildCytCampusAndBuilding({
+      scene: this.worldGroup, buildingGroup: this.buildingGroup,
+      wallBoxes: this.staticColliders, walkableTeleportMeshes: this.walkableTeleportMeshes,
+      supportSlabs: this.supportSlabs, supportRamps: this.supportRamps,
+      dynamicProps: this.cytProps
+    });
     this._buildSnifferStation();
-    this._buildBreakableStructure();
-    this._buildStaticColliders();
     this._buildStreetLightPoleGateway();
-    this._buildDynamicPropsAcrossFloors();
+    this.emergencyResponse = new EmergencyResponse(this.worldGroup);
+    this.cinematicCameraState = null;
     this._buildParticlePools();
     this._setupWebXRControllersAndMenu();
     this._bindInputs();
@@ -369,9 +355,9 @@ export class LPSBoxScene3D {
 
   restoreBackground() {
     if (!this.scene.background) {
-      this.scene.background = new THREE.Color(0x070d19);
+      this.scene.background = new THREE.Color(0xb8d7e8);
     } else if (this.scene.background.set) {
-      this.scene.background.set(0x070d19);
+      this.scene.background.set(0xb8d7e8);
     }
   }
 
@@ -395,7 +381,7 @@ export class LPSBoxScene3D {
     this.sunLight = new THREE.DirectionalLight(0xf1f5f9, 1.35);
     this.sunLight.position.set(16, 28, 22);
     this.sunLight.castShadow = true;
-    this.sunLight.shadow.mapSize.set(2048, 2048);
+    this.sunLight.shadow.mapSize.set(1024, 1024);
     this.sunLight.shadow.camera.left = -22;
     this.sunLight.shadow.camera.right = 22;
     this.sunLight.shadow.camera.top = 24;
@@ -1756,6 +1742,10 @@ export class LPSBoxScene3D {
   }
 
   resetDynamicProps() {
+    this.resetEmergencyResponse();
+    (this.cytProps || []).forEach(p => { p.mesh.position.copy(p.homePos); p.mesh.rotation.copy(p.homeRot); p.vel.set(0,0,0); p.toppled = false; });
+    this.cytBuilding?.rubbleGroups.forEach(mesh => { mesh.visible = false; });
+    if (this.cytBuilding) this.cytBuilding.snifferRubbleGroup.visible = false;
     this.dynamicProps.forEach((p) => {
       p.mesh.position.copy(p.homePos);
       p.mesh.rotation.set(0, 0, 0);
@@ -2384,9 +2374,9 @@ export class LPSBoxScene3D {
         ud.armR.rotation.set(-0.65, 0, -0.25);
         ud.legL.rotation.x = 0;
         ud.legR.rotation.x = 0;
-      } else if (p.pose === 'wave_help') {
-        ud.bodyRoot.position.y = -0.28;
-        ud.bodyRoot.rotation.x = 0.12;
+      } else if (p.pose === 'wave_help' || p.pose === 'pinned_rubble') {
+        ud.bodyRoot.position.y = p.pose === 'pinned_rubble' ? -0.85 : -0.28;
+        ud.bodyRoot.rotation.x = p.pose === 'pinned_rubble' ? 1.05 : 0.12;
         ud.headGroup.rotation.x = -0.2;
         ud.armL.rotation.set(-2.65, 0, Math.sin(this.sim.time * 8 + p.id) * 0.45);
         ud.armR.rotation.set(-0.85, 0, 0);
@@ -2851,12 +2841,12 @@ export class LPSBoxScene3D {
 
     // ROW 1 (y = +0.145): Ir a Pisos 1–4, Azotea y Vista Exterior
     const r1Cols = [-0.49, -0.294, -0.098, 0.098, 0.294, 0.49];
-    makeVrBtn(r1Cols[0], 0.145, 0.184, 0.105, 'view_exterior', '🏢 Exterior', 'Plaza General', '#38bdf8');
-    makeVrBtn(r1Cols[1], 0.145, 0.184, 0.105, 'floor_0', '☕ Piso 1', 'Cafetería', '#10b981');
-    makeVrBtn(r1Cols[2], 0.145, 0.184, 0.105, 'floor_1', '🔬 Piso 2', 'Laboratorio', '#38bdf8');
-    makeVrBtn(r1Cols[3], 0.145, 0.184, 0.105, 'floor_2', '🖧 Piso 3', 'Servidores', '#a855f7');
-    makeVrBtn(r1Cols[4], 0.145, 0.184, 0.105, 'floor_3', '🎓 Piso 4', 'Auditorio', '#f59e0b');
-    makeVrBtn(r1Cols[5], 0.145, 0.184, 0.105, 'floor_4', '☀️ Azotea', 'Nivel 13.1m', '#94a3b8');
+    makeVrBtn(r1Cols[0], 0.145, 0.184, 0.105, 'view_auditorium', 'Auditorio', 'Subterráneo', '#fb7185');
+    makeVrBtn(r1Cols[1], 0.145, 0.184, 0.105, 'floor_0', 'Piso 1', 'Acceso', '#10b981');
+    makeVrBtn(r1Cols[2], 0.145, 0.184, 0.105, 'floor_1', 'Piso 2', 'Biblioteca / TI', '#38bdf8');
+    makeVrBtn(r1Cols[3], 0.145, 0.184, 0.105, 'floor_2', 'Piso 3', 'Biblioteca', '#a855f7');
+    makeVrBtn(r1Cols[4], 0.145, 0.184, 0.105, 'floor_3', 'Piso 4', 'Cómputo', '#f59e0b');
+    makeVrBtn(r1Cols[5], 0.145, 0.184, 0.105, 'floor_4', 'Cafetería', 'Terraza', '#94a3b8');
 
     // ROW 2 (y = +0.01): Inspección Directa de Sniffer RPi5, Poste & Gateway, Polea y Consola VR
     makeVrBtn(-0.44, 0.01, 0.285, 0.112, 'view_sniffer', '📡 Sniffer RPi5', 'Ir a Piso 2 (Frente)', '#2dd4bf');
@@ -2874,7 +2864,7 @@ export class LPSBoxScene3D {
     makeVrBtn(-0.44, -0.265, 0.285, 0.102, 'toggle_vr_flight', '🛸 Modo Vuelo VR', 'Alternar Caminar/Volar', '#c084fc');
     makeVrBtn(-0.145, -0.265, 0.285, 0.102, 'shove_props', '✋ Empujar / Golpe', 'Física de Objetos', '#38bdf8');
     makeVrBtn(0.15, -0.265, 0.285, 0.102, 'toggle_flashlight', '🔦 Linterna Casco', 'Luz de Rescate', '#fde047');
-    makeVrBtn(0.445, -0.265, 0.285, 0.102, 'recenter_menu', '📌 Centrar Panel', 'O pulsa Grip', '#94a3b8');
+    makeVrBtn(0.445, -0.265, 0.285, 0.102, 'view_exterior', 'Exterior', 'Plazoleta', '#94a3b8');
 
     // 4. Floating 3D Holographic Gateway Data & Seismogram Board right beside VR Menu!
     this.vrDataCanvas = document.createElement('canvas');
@@ -2890,6 +2880,26 @@ export class LPSBoxScene3D {
     this.vrDataBoard.rotation.y = -0.26;
     this.vrDataBoard.visible = false;
     this.vrMenuGroup.add(this.vrDataBoard);
+
+    // Controles de informe accesibles por rayos, sin depender del DOM en el visor.
+    this.vrConsoleButtons = [];
+    ['S','A','B','C','D','E'].forEach((id, i) => {
+      for (const [label, delta, dx] of [['−', -1, 0.29], ['+', 1, 0.43]]) {
+        const btn = makeVrBtn(1.22 + dx, 0.16 - i * 0.069, 0.115, 0.057,
+          `report_${id}_${delta}`, label, '', '#38bdf8');
+        btn.userData.consoleOnly = true;
+        btn.position.z = 0.38;
+        btn.visible = false;
+        this.vrConsoleButtons.push(btn);
+      }
+    });
+    [['report_priority','Prioridad'], ['report_submit','Enviar']].forEach(([action, label], i) => {
+      const btn = makeVrBtn(0.98 + i * 0.40, -0.30, 0.36, 0.075, action, label, '', '#34d399');
+      btn.userData.consoleOnly = true;
+      btn.position.z = 0.38;
+      btn.visible = false;
+      this.vrConsoleButtons.push(btn);
+    });
 
     this._updateVrMenuStatusHeader();
     this._updateVrDataBoardCanvas();
@@ -2909,7 +2919,7 @@ export class LPSBoxScene3D {
 
     ctx.fillStyle = '#38bdf8';
     ctx.font = 'bold 28px system-ui, sans-serif';
-    ctx.fillText('🥽 PANEL TÁCTICO VR — LPSBOX (4 PISOS · SNIFFER · GATEWAY)', 22, 40);
+    ctx.fillText('🥽 PANEL VR — LPSBOX · CyT UNAL (MODELO APROXIMADO)', 22, 40);
 
     const poleTxt =
       this.sim.gatewayPoleState === 'down'
@@ -2934,118 +2944,51 @@ export class LPSBoxScene3D {
   _updateVrDataBoardCanvas() {
     if (!this.vrDataCanvas) return;
     const ctx = this.vrDataCanvas.getContext('2d');
-    const w = this.vrDataCanvas.width;
-    const h = this.vrDataCanvas.height;
-
-    ctx.fillStyle = 'rgba(6, 12, 24, 0.96)';
-    ctx.fillRect(0, 0, w, h);
-    ctx.strokeStyle = this.sim.gatewayLeds.yellow ? '#fbbf24' : '#38bdf8';
-    ctx.lineWidth = 6;
-    ctx.strokeRect(4, 4, w - 8, h - 8);
-
-    ctx.fillStyle = '#f8fafc';
-    ctx.font = 'bold 26px system-ui, sans-serif';
-    ctx.fillText('📊 CONSOLA HOLOGRÁFICA VR — EXTRACCIÓN GATEWAY', 24, 42);
-
+    const w = this.vrDataCanvas.width, h = this.vrDataCanvas.height;
+    ctx.fillStyle = '#071424'; ctx.fillRect(0, 0, w, h);
+    ctx.strokeStyle = '#38bdf8'; ctx.lineWidth = 5; ctx.strokeRect(3, 3, w-6, h-6);
+    ctx.fillStyle = '#f8fafc'; ctx.font = 'bold 28px sans-serif';
+    ctx.fillText('GATEWAY · INFORME VR', 20, 38);
+    ctx.font = '20px sans-serif';
+    const snap = this.sim.frozenSnapshot;
     if (!this.sim.canExtractGateway()) {
       ctx.fillStyle = '#fbbf24';
-      ctx.font = 'bold 23px system-ui, sans-serif';
-      ctx.fillText('🔒 Gateway arriba en el Poste de Luz (4.65 m)', 24, 92);
-      ctx.fillStyle = '#cbd5e1';
-      ctx.font = '20px system-ui, sans-serif';
-      ctx.fillText('Pulsa [🪜 Polea Poste] en el panel VR o apunta al poste con el gatillo', 24, 128);
-      ctx.fillText('para bajarlo a 1.18 m y extraer la captura pre-sismo (t₀).', 24, 158);
+      ctx.fillText('1  Baja el Gateway con POLEA POSTE.', 20, 85);
+      ctx.fillText('2  Abre Datos Gateway para conectar.', 20, 120);
+    } else if (!this.sim.dataExtractedByOperator) {
+      ctx.fillText('Abre Datos Gateway para conectar por USB-C.', 20, 85);
+    } else if (!snap) {
+      ctx.fillText('Conectado. Sin captura t₀: inicia un sismo.', 20, 85);
     } else {
-      const snap = this.sim.frozenSnapshot;
-      const rawList = snap
-        ? snap.rawPackets
-        : this.sim.rollingProbes.filter((p) => this.sim.time - p.timestamp <= 10.0);
-      const uniqueMap = new Map();
-      rawList.forEach((pkt) => {
-        if (!pkt.isDuplicateRandomBurst) uniqueMap.set(pkt.deviceHash, pkt);
-      });
-      const uniqueList = Array.from(uniqueMap.values());
-      const zCounts = { A: 0, B: 0, C: 0, D: 0 };
-      uniqueList.forEach((p) => {
-        if (zCounts[p.estimatedZone] !== undefined) zCounts[p.estimatedZone]++;
-      });
-
-      ctx.fillStyle = snap ? '#fcd34d' : '#38bdf8';
-      ctx.font = 'bold 21px monospace';
-      ctx.fillText(
-        snap
-          ? `🟡 SNAPSHOT PRE-SISMO CONGELADO EN t₀ = ${snap.triggerTime.toFixed(1)}s (${snap.magnitude.toFixed(1)} Mw)`
-          : '🔵 MONITOREO EN VIVO (Ventana 10s recibida desde RPi5)',
-        24,
-        84
-      );
-
-      if (this.sim.snifferDamaged) {
-        ctx.fillStyle = '#fb7185';
-        ctx.font = 'bold 19px monospace';
-        ctx.fillText('⚠ SNIFFER PISO 2 BAJO ESCOMBROS — DATOS t₀ SALVADOS EN ESTE GATEWAY', 24, 114);
-      }
-
-      ctx.fillStyle = '#34d399';
-      ctx.font = 'bold 28px monospace';
-      ctx.fillText(`TOTAL CELULARES ÚNICOS (t₀): ${uniqueList.length} personas`, 24, 156);
-
-      const floorRows = [
-        ['Piso 1 — Cafetería & Lobby:', zCounts.A, '#10b981'],
-        ['Piso 2 — Laboratorio & RPi5:', zCounts.B, '#38bdf8'],
-        ['Piso 3 — Sala de Servidores:', zCounts.C, '#a855f7'],
-        ['Piso 4 — Auditorio Proyectos:', zCounts.D, '#f59e0b']
-      ];
-      floorRows.forEach(([label, count, col], idx) => {
-        const ry = 200 + idx * 36;
-        ctx.fillStyle = col;
-        ctx.font = 'bold 22px monospace';
-        ctx.fillText(`${label}  ${count} celulares`, 32, ry);
-      });
-
-      const trappedNow = this.sim.people.filter((p) => p.state === 'trapped').length;
-      ctx.fillStyle = trappedNow > 0 ? '#fda4af' : '#94a3b8';
-      ctx.font = 'bold 19px monospace';
-      ctx.fillText(
-        `MACs Aleatorias Filtradas: ${rawList.filter((p) => p.isDuplicateRandomBurst).length}  |  Atrapados Post-Sismo: ${trappedNow}`,
-        24,
-        355
-      );
-    }
-
-    // Draw Mini Seismogram at the bottom of VR Holographic Console (y: 375..518)
-    const sx = 24;
-    const sy = 378;
-    const sw = w - 48;
-    const sh = 138;
-    ctx.fillStyle = '#030712';
-    ctx.fillRect(sx, sy, sw, sh);
-    ctx.strokeStyle = '#1e293b';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(sx, sy, sw, sh);
-
-    const ev = this.sim.getEventSeismogram();
-    const series = ev && ev.samples.length >= 2 ? ev.samples : this.sim.seismoHistory;
-    if (series.length >= 2) {
-      const maxG = Math.max(0.18, ev ? ev.peakG * 1.15 : 0.75);
-      ctx.strokeStyle = '#38bdf8';
-      ctx.lineWidth = 2.5;
-      ctx.beginPath();
-      series.forEach((pt, idx) => {
-        const px = sx + (idx / (series.length - 1)) * sw;
-        const py = sy + sh - 10 - Math.min(1, pt.accelG / maxG) * (sh - 24);
-        if (idx === 0) ctx.moveTo(px, py);
-        else ctx.lineTo(px, py);
+      ctx.fillStyle = '#fbbf24';
+      ctx.fillText(`t₀ ${snap.triggerTime.toFixed(1)}s  ·  ${snap.magnitude.toFixed(1)} Mw`, 20, 75);
+      ctx.fillStyle = '#cbd5e1'; ctx.font = '18px sans-serif';
+      ctx.fillText(`Tramas ${snap.rawPacketCount} · Únicos ${snap.filteredUniqueCount} · STA/LTA ${snap.triggerStaLta.toFixed(1)}`, 20, 105);
+      const record = this.sim.getEventSeismogram();
+      const samples = record?.samples?.length > 1 ? record.samples : this.sim.seismoHistory;
+      const gx = 475, gy = 46, gw = 270, gh = 65;
+      ctx.fillStyle = '#020b16'; ctx.fillRect(gx, gy, gw, gh);
+      ctx.strokeStyle = '#38bdf8'; ctx.lineWidth = 2; ctx.beginPath();
+      const maxG = Math.max(0.2, record?.peakG || 0.2);
+      samples.forEach((p, i) => {
+        const x = gx + i / Math.max(1, samples.length - 1) * gw;
+        const y = gy + gh - 3 - Math.min(1, p.accelG / maxG) * (gh - 8);
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
       });
       ctx.stroke();
-
-      if (ev && ev.snifferDamagedRelTime !== null && ev.snifferDamagedRelTime !== undefined) {
-        ctx.fillStyle = '#fb7185';
-        ctx.font = 'bold 16px monospace';
-        ctx.fillText(`🪨 Corte RPi5 (+${ev.snifferDamagedRelTime.toFixed(1)}s)`, sx + 12, sy + 24);
+      const names = { S:'Auditorio -1', A:'Piso 1', B:'Piso 2', C:'Piso 3', D:'Piso 4', E:'Cafetería' };
+      ctx.font = 'bold 21px sans-serif';
+      ['S','A','B','C','D','E'].forEach((id, i) => {
+        ctx.fillStyle = '#e2e8f0';
+        ctx.fillText(`${names[id]}  ·  señal ${snap.snifferZoneCounts[id] || 0}  ·  informe ${this.sim.vrDraftGuesses[id]}`, 25, 160 + i * 49);
+      });
+      ctx.fillStyle = '#34d399'; ctx.font = 'bold 19px sans-serif';
+      ctx.fillText(`Prioridad: ${names[this.sim.vrPriorityZone]}  ·  +/- edita el informe`, 25, 465);
+      if (this.sim.lastEvaluationResult) {
+        const r = this.sim.lastEvaluationResult;
+        ctx.fillText(`Resultado: ${r.score}/100 · real: ${r.truthTotal} · prioridad: ${r.bestPriorityZoneCode}`, 25, 500);
       }
     }
-
     this.vrDataTex.needsUpdate = true;
   }
 
@@ -3121,26 +3064,15 @@ export class LPSBoxScene3D {
 
   teleportXrToPreset(preset) {
     const presets = {
-      view_exterior: { x: 2.2, y: 0.14, z: 11.4, yaw: 0.15 },
-      floor_0: { x: -0.8, y: 0.22, z: 1.85, yaw: 0.32 },
-      floor_1: { x: -2.4, y: 3.42, z: 1.35, yaw: -0.22 },
-      floor_2: { x: -0.8, y: 6.62, z: 1.55, yaw: 0.24 },
-      floor_3: { x: -1.1, y: 9.82, z: 1.75, yaw: 0.35 },
-      floor_4: { x: -0.8, y: 13.08, z: 1.5, yaw: 0.12 },
-      // Close-up right in front of Piso 2 Sniffer RPi 5 + calibrated OLED!
-      view_sniffer: {
-        x: SNIFFER_WORLD_POS.x + 0.05,
-        y: 3.42,
-        z: SNIFFER_WORLD_POS.z + 1.35,
-        yaw: 0.0
-      },
-      // Close-up beside Outdoor Street Light Pole, Winch & 3-LED Gateway!
-      view_gateway: {
-        x: POLE_WORLD_POS.x - 2.1,
-        y: 0.14,
-        z: POLE_WORLD_POS.z + 1.3,
-        yaw: -0.98
-      }
+      view_exterior: { x: 1, y: 0.08, z: 17, yaw: 0 },
+      view_auditorium: { x: -3.6, y: -3.4, z: 4.4, yaw: Math.PI },
+      floor_0: { x: -7, y: 0.12, z: -3.3, yaw: 0 },
+      floor_1: { x: 0, y: 3.52, z: -3.5, yaw: 0 },
+      floor_2: { x: 0, y: 6.92, z: -3.5, yaw: 0 },
+      floor_3: { x: 0, y: 10.32, z: -3.5, yaw: 0 },
+      floor_4: { x: 4, y: 13.72, z: -6.8, yaw: 0 },
+      view_sniffer: { x: SNIFFER_WORLD_POS.x, y: 3.52, z: SNIFFER_WORLD_POS.z + 1.3, yaw: 0 },
+      view_gateway: { x: POLE_WORLD_POS.x - 2.1, y: 0.08, z: POLE_WORLD_POS.z + 1.3, yaw: -0.98 }
     };
     const p = presets[preset] || presets.view_exterior;
     if (this.renderer.xr?.isPresenting) {
@@ -3159,6 +3091,7 @@ export class LPSBoxScene3D {
   _handleVrUiAction(action) {
     if (
       action === 'view_exterior' ||
+      action === 'view_auditorium' ||
       action === 'floor_0' ||
       action === 'floor_1' ||
       action === 'floor_2' ||
@@ -3172,6 +3105,25 @@ export class LPSBoxScene3D {
       return;
     }
 
+    if (action.startsWith('report_')) {
+      if (!this.sim.dataExtractedByOperator || !this.sim.frozenSnapshot) return;
+      if (action === 'report_priority') {
+        const keys = ['S', 'A', 'B', 'C', 'D', 'E'];
+        this.sim.vrPriorityZone = keys[(keys.indexOf(this.sim.vrPriorityZone) + 1) % keys.length];
+      } else if (action === 'report_submit') {
+        const zoneGuesses = { ...this.sim.vrDraftGuesses };
+        const totalGuess = Object.values(zoneGuesses).reduce((a, b) => a + b, 0);
+        this.sim.evaluateOperatorReport({ totalGuess, zoneGuesses, priorityZoneGuess: this.sim.vrPriorityZone });
+      } else {
+        const [, zone, delta] = action.split('_');
+        if (zone in this.sim.vrDraftGuesses) {
+          this.sim.vrDraftGuesses[zone] = Math.max(0, Math.min(60, this.sim.vrDraftGuesses[zone] + Number(delta)));
+        }
+      }
+      this._updateVrDataBoardCanvas();
+      return;
+    }
+
     if (action === 'summon_menu' || action === 'recenter_menu') {
       this.summonVrMenuInFront(0, true);
     } else if (action === 'toggle_pole') {
@@ -3181,6 +3133,7 @@ export class LPSBoxScene3D {
     } else if (action === 'toggle_vr_console') {
       this.vrConsoleOpen = !this.vrConsoleOpen;
       if (this.vrDataBoard) this.vrDataBoard.visible = this.vrConsoleOpen;
+      this.vrConsoleButtons?.forEach(btn => { btn.visible = this.vrConsoleOpen; });
       if (this.sim.canExtractGateway()) {
         this.sim.dataExtractedByOperator = true;
       }
@@ -3227,7 +3180,7 @@ export class LPSBoxScene3D {
 
     // 2. Check Floating 3D VR Menu Buttons (and Tablet Frame Blocker so gaps don't teleport!)
     if (this.vrMenuGroup?.visible) {
-      const uiHits = this.raycaster.intersectObjects(this.vrUiButtons, false);
+      const uiHits = this.raycaster.intersectObjects(this.vrUiButtons.filter(b => b.visible), false);
       if (uiHits.length > 0) {
         const act = uiHits[0].object.userData.vrAction;
         if (act) this._handleVrUiAction(act);
@@ -3244,10 +3197,11 @@ export class LPSBoxScene3D {
       if (this.sim.gatewayPoleState === 'down') {
         this.vrConsoleOpen = true;
         if (this.vrDataBoard) this.vrDataBoard.visible = true;
+        this.vrConsoleButtons?.forEach(btn => { btn.visible = true; });
         this.sim.dataExtractedByOperator = true;
         this.summonVrMenuInFront(-0.25, true);
         this._updateVrDataBoardCanvas();
-        if (this.cb.onGatewayClick) this.cb.onGatewayClick();
+        if (this.cb.onVrAction) this.cb.onVrAction('toggle_vr_console');
       } else if (this.cb.onPoleClick) {
         this.cb.onPoleClick();
       }
@@ -3265,7 +3219,7 @@ export class LPSBoxScene3D {
       if (dSniffer > 3.0) {
         this.teleportXrToPreset('view_sniffer');
       } else if (!this.sim.snifferDamaged) {
-        this.sim.hitSnifferTable();
+        this.sim.triggerPhysicalTableHit();
       }
       return;
     }
@@ -3283,6 +3237,8 @@ export class LPSBoxScene3D {
   }
 
   onXrSessionStart() {
+    // A desktop cinematic must not carry a moving camera into an immersive session.
+    if (this.cinematicCameraState) this.skipEmergencyCinematic();
     this.stopIntroOrbit();
     this.controls.enabled = false;
     this.vrMenuVisible = true;
@@ -3413,7 +3369,7 @@ export class LPSBoxScene3D {
         this.xrRig.position.y += -rightStickY * flySpd * 0.9;
       }
       this.xrRig.position.x = Math.max(-40, Math.min(40, this.xrRig.position.x));
-      this.xrRig.position.y = Math.max(0.14, Math.min(34, this.xrRig.position.y));
+      this.xrRig.position.y = Math.max(-3.4, Math.min(34, this.xrRig.position.y));
       this.xrRig.position.z = Math.max(-30, Math.min(38, this.xrRig.position.z));
     } else {
       // Grounded VR Walking with Solid Wall Collisions & 4-Story Stairwell Climbing!
@@ -3473,7 +3429,7 @@ export class LPSBoxScene3D {
       let rayLen = 11.0;
 
       if (this.vrMenuGroup?.visible) {
-        const uiHits = this.raycaster.intersectObjects(this.vrUiButtons, false);
+        const uiHits = this.raycaster.intersectObjects(this.vrUiButtons.filter(b => b.visible), false);
         if (uiHits.length > 0) {
           hoveredBtn = uiHits[0].object;
           rayLen = uiHits[0].distance;
@@ -3644,7 +3600,7 @@ export class LPSBoxScene3D {
   }
 
   triggerOperatorShove() {
-    if (this.cameraMode !== 'firstperson') return 0;
+    if (this.cameraMode !== 'firstperson' && !this.renderer.xr?.isPresenting) return 0;
 
     const fwdX = -Math.sin(this.fpYaw);
     const fwdZ = -Math.cos(this.fpYaw);
@@ -3699,13 +3655,23 @@ export class LPSBoxScene3D {
       }
     });
 
+    this.cytProps.forEach(p => {
+      const dx = p.mesh.position.x - opX, dz = p.mesh.position.z - opZ;
+      const dist = Math.hypot(dx, dz);
+      if (Math.abs(p.floorY - opFeetY) > 1 || dist > 2.2 || dist < 0.05) return;
+      if ((dx * fwdX + dz * fwdZ) / dist < 0.25) return;
+      p.toppled = true;
+      p.vel.set(fwdX * 2.2, 1.2, fwdZ * 2.2);
+      pushedCount++;
+    });
+
     // If standing right in front of the intact Piso 2 Sniffer RPi 5, physically tap its mount!
     if (
       Math.abs(opFeetY - 3.42) < 0.7 &&
       Math.hypot(opX - SNIFFER_WORLD_POS.x, opZ - SNIFFER_WORLD_POS.z) < 2.3 &&
       !this.sim.snifferDamaged
     ) {
-      this.sim.hitSnifferTable();
+      this.sim.triggerPhysicalTableHit();
       pushedCount++;
     }
 
@@ -3716,88 +3682,27 @@ export class LPSBoxScene3D {
   }
 
   _getSupportHeight(x, z, feetY) {
-    const maxStep = 0.54;
-    let best = 0.0;
-
-    const consider = (h) => {
-      if (h <= feetY + maxStep && h > best) {
-        best = h;
-      }
-    };
-
-    // 1. Exterior urban sidewalks & roadway
-    if (x >= -15.5 && x <= 15.5 && z >= -7.0 && z <= 14.5) {
-      if (z >= 5.8 && z <= 7.1) {
-        consider(0.06); // Asphalt street
-      } else {
-        consider(0.14); // Sidewalk / concrete plaza
-      }
+    const step = 0.54;
+    let best = -Infinity;
+    // Ground is absent in the auditorium stair opening and below the plaza.
+    const opening = x >= -5.5 && x <= -1.7 && z >= -2 && z <= 3.4;
+    if (!opening && feetY >= -0.4) best = 0;
+    const consider = h => { if (h <= feetY + step && h > best) best = h; };
+    for (const slab of this.supportSlabs) {
+      if (x >= slab.xMin && x <= slab.xMax && z >= slab.zMin && z <= slab.zMax) consider(slab.topY);
     }
-
-    // 2. Front Entrance Threshold Ramp (Lobby portal x in [-2.42..0.02], z in [3.50..4.35])
-    if (x >= -2.45 && x <= 0.05 && z >= 3.50 && z <= 4.35) {
-      const t = Math.max(0, Math.min(1, (4.35 - z) / 0.85));
-      consider(0.14 + t * 0.08);
+    for (const ramp of this.supportRamps) {
+      if (x >= ramp.xMin && x <= ramp.xMax && z >= ramp.zMin && z <= ramp.zMax &&
+          (ramp.minRefY === undefined || feetY >= ramp.minRefY) &&
+          (ramp.maxRefY === undefined || feetY <= ramp.maxRefY)) consider(ramp.yAt(x, z));
     }
-
-    // 3. Stairwell Ground Threshold Ramp (x in [5.85..8.75], z in [3.50..4.15])
-    if (x >= 5.85 && x <= 8.75 && z >= 3.50 && z <= 4.15) {
-      const t = Math.max(0, Math.min(1, (4.15 - z) / 0.65));
-      consider(0.14 + t * 0.08);
-    }
-
-    // 4. Main 4-Story Floor Slabs (x in [-8.70..5.58], z in [-4.45..3.62])
-    if (x >= -8.70 && x <= 5.58 && z >= -4.45 && z <= 3.62) {
-      for (let f = 0; f < 4; f++) {
-        consider(f * FLOOR_HEIGHT + 0.22);
-      }
-      // Rooftop main deck (f = 4)
-      consider(4 * FLOOR_HEIGHT + 0.28);
-    }
-
-    // 5. Walkable U-Turn Stairwell Landings & Flights (x in [5.48..8.92], z in [-4.08..3.56])
-    if (x >= 5.48 && x <= 8.92 && z >= -4.08 && z <= 3.56) {
-      for (let f = 0; f <= 4; f++) {
-        const yFloor = f * FLOOR_HEIGHT + (f === 4 ? 0.28 : 0.22);
-
-        // South Floor Landing (z in [1.50..3.56])
-        if (z >= 1.50 && z <= 3.56) {
-          if (f < 4 || x >= 7.20) {
-            consider(yFloor);
-          }
-        }
-
-        if (f < 4) {
-          const yMid = f * FLOOR_HEIGHT + 1.82;
-          const yNext = (f + 1) * FLOOR_HEIGHT + (f + 1 === 4 ? 0.28 : 0.22);
-
-          // North Mid-Landing (z in [-4.08..-2.10])
-          if (z >= -4.08 && z <= -2.10 && x >= 5.65) {
-            consider(yMid);
-          }
-
-          // Flight 1 (West lane x in [5.65..7.25], rising North from z=+1.55 -> z=-2.15)
-          if (x >= 5.65 && x <= 7.25 && z >= -2.18 && z <= 1.58) {
-            const frac = Math.max(0, Math.min(1, (1.55 - z) / 3.70));
-            consider(yFloor + frac * (yMid - yFloor));
-          }
-
-          // Flight 2 (East lane x in [7.25..8.92], rising South from z=-2.15 -> z=+1.55)
-          if (x >= 7.25 && x <= 8.92 && z >= -2.18 && z <= 1.58) {
-            const frac = Math.max(0, Math.min(1, (z - -2.15) / 3.70));
-            consider(yMid + frac * (yNext - yMid));
-          }
-        }
-      }
-    }
-
-    return best;
+    return Number.isFinite(best) ? best : (feetY < -0.4 ? -3.4 : 0);
   }
 
   _resolveOperatorCollisions(nextX, nextZ, feetY, headY) {
     const radius = 0.34;
-    let rx = Math.max(-24.0, Math.min(24.0, nextX));
-    let rz = Math.max(-13.5, Math.min(20.5, nextZ));
+    let rx = Math.max(-45.0, Math.min(40.0, nextX));
+    let rz = Math.max(-32.0, Math.min(30.0, nextZ));
     let hitWall = false;
 
     const resolveBoxList = (boxes, checkStage = false) => {
@@ -3883,17 +3788,13 @@ export class LPSBoxScene3D {
       z = this.camera.position.z;
     }
 
-    let location = 'Calle / Plaza Exterior';
-    if (x >= 5.48 && x <= 9.0 && z >= -4.1 && z <= 3.6) {
-      const approxFloor = Math.min(4, Math.max(1, Math.floor((y + 0.4) / FLOOR_HEIGHT) + 1));
-      location = y > 12.8 ? 'Acceso Azotea' : `Escalera · Nivel Piso ${approxFloor}`;
-    } else if (x >= -8.8 && x <= 5.58 && z >= -4.5 && z <= 3.65) {
-      if (y >= 12.7) location = 'Azotea Técnica (13.1m)';
-      else if (y >= 9.5) location = 'Piso 4 — Auditorio';
-      else if (y >= 6.3) location = 'Piso 3 — Servidores';
-      else if (y >= 3.1) location = 'Piso 2 — Lab & Sniffer RPi5';
-      else location = 'Piso 1 — Cafetería & Lobby';
-    }
+    let location = 'Plazoleta CyT';
+    if (y < -0.8) location = 'Auditorio subterráneo';
+    else if (y > 13.2) location = 'Cafetería y terraza';
+    else if (y > 9.8) location = 'Piso 4 · cómputo';
+    else if (y > 6.4) location = 'Piso 3 · biblioteca y aulas';
+    else if (y > 3.0) location = 'Piso 2 · biblioteca y Sniffer';
+    else if (z < 4) location = 'Piso 1 · acceso';
 
     return {
       mode: this.cameraMode,
@@ -3908,14 +3809,15 @@ export class LPSBoxScene3D {
   }
 
   setCameraMode(mode) {
+    if (this.cinematicCameraState) this.skipEmergencyCinematic();
     this.stopIntroOrbit();
     const prevMode = this.cameraMode;
     this.cameraMode = mode;
 
     if (mode === 'tactical') {
       this.controls.enabled = true;
-      this.camera.position.set(1.5, 13.8, 25.5);
-      this.controls.target.set(0.2, 5.6, 1.2);
+      this.camera.position.set(18, 22, 37);
+      this.controls.target.set(-3, 6, -2);
     } else if (mode === 'gateway' || mode === 'pole') {
       this.controls.enabled = true;
       const focusY = this.sim.gatewayPoleState === 'down' ? 1.55 : 3.35;
@@ -3963,28 +3865,62 @@ export class LPSBoxScene3D {
   }
 
   teleportOperatorToFloor(floorIndex = 0) {
-    this.setCameraMode('firstperson');
-    if (floorIndex <= 0) {
-      this.fpPos.set(-1.2, 0.22, 2.2);
-      this.fpYaw = 0.0;
-    } else if (floorIndex === 1) {
-      // Piso 2 right in front of Sniffer RPi 5
-      this.fpPos.set(1.8, 3.42, -1.2);
-      this.fpYaw = 0.72;
-    } else if (floorIndex === 2) {
-      this.fpPos.set(0.6, 6.62, 0.5);
-      this.fpYaw = 0.4;
-    } else if (floorIndex === 3) {
-      this.fpPos.set(0.8, 9.82, 0.4);
-      this.fpYaw = 0.5;
-    } else {
-      this.fpPos.set(0.0, 13.08, 0.5);
-      this.fpYaw = 0.0;
+    this.teleportXrToPreset(`floor_${Math.max(0, Math.min(4, floorIndex))}`);
+  }
+
+  startEmergencyResponse(useCamera = true) {
+    if (!this.emergencyResponse) return;
+    this.resetEmergencyResponse();
+    this.emergencyResponse.start();
+    // Never move the headset: in XR the same arrival happens in the world around the player.
+    if (useCamera && !this.renderer.xr.isPresenting) {
+      this.cinematicCameraState = {
+        position: this.camera.position.clone(), quaternion: this.camera.quaternion.clone(),
+        target: this.controls.target.clone(), controlsEnabled: this.controls.enabled
+      };
+      this.controls.enabled = false;
+      if (this.cb.onCinematicChange) this.cb.onCinematicChange(true);
     }
-    this.fpVelY = 0;
-    this.fpGrounded = true;
-    this.fpPitch = -0.04;
-    this.camera.position.set(this.fpPos.x, this.fpPos.y + 1.58, this.fpPos.z);
+  }
+
+  _restoreCinematicCamera() {
+    const state = this.cinematicCameraState;
+    if (!state) return;
+    this.camera.position.copy(state.position);
+    this.camera.quaternion.copy(state.quaternion);
+    this.controls.target.copy(state.target);
+    this.controls.enabled = state.controlsEnabled;
+    this.cinematicCameraState = null;
+    if (this.cb.onCinematicChange) this.cb.onCinematicChange(false);
+  }
+
+  skipEmergencyCinematic() {
+    if (!this.emergencyResponse?.active) return;
+    this.emergencyResponse.finish();
+    this._restoreCinematicCamera();
+    if (this.cb.onResponseEnd) this.cb.onResponseEnd();
+  }
+
+  resetEmergencyResponse() {
+    const hadResponse = this.emergencyResponse?.active || this.emergencyResponse?.completed;
+    this._restoreCinematicCamera();
+    this.emergencyResponse?.reset();
+    if (hadResponse && this.cb.onResponseEnd) this.cb.onResponseEnd();
+  }
+
+  _updateEmergencyResponse(dt) {
+    if (!this.emergencyResponse) return;
+    if (this.emergencyResponse.update(dt)) {
+      this._restoreCinematicCamera();
+      if (this.cb.onResponseEnd) this.cb.onResponseEnd();
+    }
+  }
+
+  _updateCinematicCamera() {
+    // Track the vehicles rather than a fixed point; both remain in view as they enter.
+    const focusX = (this.emergencyResponse.fire.position.x + this.emergencyResponse.ambulance.position.x) * 0.5;
+    this.camera.position.set(focusX + 2, 10.5, 42);
+    this.camera.lookAt(focusX, 1.25, 27);
   }
 
   onResize() {
@@ -4021,6 +3957,26 @@ export class LPSBoxScene3D {
       this.rooftopGroup.position.z *= 0.84;
       this.stairwellGroup.position.x *= 0.84;
       this.stairwellGroup.position.z *= 0.84;
+    }
+
+    // Show rubble only where the simulation placed a victim, and animate loose equipment.
+    if (this.cytBuilding) {
+      const occupied = new Set(this.sim.people.filter(p => p.state === 'trapped').map(p => p.rubblePocketId));
+      this.cytBuilding.rubbleGroups.forEach((mesh, id) => { mesh.visible = occupied.has(id); });
+      this.cytBuilding.snifferRubbleGroup.visible = this.sim.snifferDamaged;
+      this.cytProps.forEach(p => {
+        if (this.sim.quakeActive && gAmp > p.thresholdG) p.toppled = true;
+        if (p.toppled) {
+          p.vel.y -= 9.8 * dt;
+          p.mesh.position.y = Math.max(p.floorY, p.mesh.position.y + p.vel.y * dt);
+          p.mesh.position.x += p.vel.x * dt;
+          p.mesh.position.z += p.vel.z * dt;
+          p.vel.x *= Math.exp(-4 * dt);
+          p.vel.z *= Math.exp(-4 * dt);
+          if (p.mesh.position.y <= p.floorY) p.vel.y = 0;
+          else p.mesh.rotation.z += dt * 1.7;
+        }
+      });
     }
 
     // Spin rooftop HVAC fans
@@ -4121,9 +4077,13 @@ export class LPSBoxScene3D {
       }
     }
 
+    this._updateEmergencyResponse(dt);
+
     // 6. Camera Controls: WebXR VR Locomotion, Operator Solid Physics ('firstperson'), Free-Fly ('freefly'), or Orbit
     if (this.renderer.xr.isPresenting) {
       this._updateXrLocomotionAndControllers(dt);
+    } else if (this.cinematicCameraState) {
+      this._updateCinematicCamera();
     } else {
       // Apply smooth on-screen Touch Look joystick if active
       if (Math.abs(this.touchInput.lookX) > 0.02 || Math.abs(this.touchInput.lookY) > 0.02) {
@@ -4292,7 +4252,7 @@ export class LPSBoxScene3D {
 
         // Clamp only to skybox bounds so user can explore everything freely without getting lost
         this.camera.position.x = Math.max(-42, Math.min(42, this.camera.position.x));
-        this.camera.position.y = Math.max(0.35, Math.min(38, this.camera.position.y));
+        this.camera.position.y = Math.max(-4.5, Math.min(38, this.camera.position.y));
         this.camera.position.z = Math.max(-32, Math.min(42, this.camera.position.z));
 
         this.camera.rotation.order = 'YXZ';
