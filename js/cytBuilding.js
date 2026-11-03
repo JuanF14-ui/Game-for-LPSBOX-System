@@ -351,7 +351,7 @@ export function buildCytCampusAndBuilding({
   const campusGroup = new THREE.Group();
   scene.add(campusGroup);
 
-  // Prado verde sabanero de la Ciudad Universitaria (con hueco para el Auditorio Subterráneo!)
+  // Prado verde sabanero de la Ciudad Universitaria
   const grassMat = new THREE.MeshStandardMaterial({ color: 0x3f6a34, roughness: 0.94 });
   const grassNorth = new THREE.Mesh(new THREE.PlaneGeometry(130, 52), grassMat);
   grassNorth.rotation.x = -Math.PI / 2;
@@ -379,7 +379,7 @@ export function buildCytCampusAndBuilding({
 
   walkableTeleportMeshes.push(grassNorth, grassSouth, grassWest, grassEast);
 
-  // Gran Plazoleta de Concreto del CyT (dejando el vano de la escalera al Auditorio Subterráneo en x:-5.5..-1.7, z:-2.0..+3.5)
+  // Gran plazoleta de concreto del CyT
   const plazaMat = new THREE.MeshStandardMaterial({ map: plazaTex, roughness: 0.82, metalness: 0.04 });
 
   // Plazoleta principal oriente y sur
@@ -395,11 +395,16 @@ export function buildCytCampusAndBuilding({
   campusGroup.add(plazaSouthWest);
   registerSlab(plazaSouthWest, -12.0, -1.5, 3.7, 23.5, 0.08);
 
-  const plazaWestStrip = new THREE.Mesh(new THREE.BoxGeometry(6.4, 0.16, 6.2), plazaMat);
-  plazaWestStrip.position.set(-8.8, 0.0, 0.6);
-  plazaWestStrip.receiveShadow = true;
-  campusGroup.add(plazaWestStrip);
-  registerSlab(plazaWestStrip, -12.0, -5.6, -2.5, 3.7, 0.08);
+  // Completar la plazoleta junto al ala izquierda.
+  for (const [cx, cz, width, depth] of [
+    [-6.75, 0.6, 10.5, 6.2]
+  ]) {
+    const slab = new THREE.Mesh(new THREE.BoxGeometry(width, 0.16, depth), plazaMat);
+    slab.position.set(cx, 0, cz);
+    slab.receiveShadow = true;
+    campusGroup.add(slab);
+    registerSlab(slab, cx - width / 2, cx + width / 2, cz - depth / 2, cz + depth / 2, 0.08);
+  }
 
   // Vía de servicio frente a la plazoleta, usada por los vehículos de emergencia.
   const roadMat = new THREE.MeshStandardMaterial({ color: 0x596168, roughness: 0.94 });
@@ -516,109 +521,67 @@ export function buildCytCampusAndBuilding({
   });
 
   // ============================================================================
-  // 2. GRAN AUDITORIO SUBTERRÁNEO (-1, y = -3.40 m) CERCA A LA ENTRADA PRINCIPAL
+  // 2. AUDITORIO SUBTERRÁNEO (-1, y = -3.40 m) BAJO LA BIBLIOTECA
   // ============================================================================
   const audGroup = new THREE.Group();
   buildingGroup.add(audGroup);
 
-  // Losa base del auditorio subterráneo
-  const audFloor = new THREE.Mesh(new THREE.BoxGeometry(13.6, 0.28, 11.4), mats.auditoriumCarpet);
-  audFloor.position.set(-3.6, -3.54, 3.5);
+  // Sala más amplia bajo el ala de biblioteca. El acceso está bajo el volumen del
+  // segundo piso, junto a la entrada de la biblioteca; no es un plano medido.
+  const audFloor = new THREE.Mesh(new THREE.BoxGeometry(16, 0.28, 23.5), mats.auditoriumCarpet);
+  audFloor.position.set(-14, -3.54, 0.25);
   audFloor.receiveShadow = true;
   audGroup.add(audFloor);
-  registerSlab(audFloor, -10.3, 3.1, -2.1, 9.1, -3.4);
+  registerSlab(audFloor, -22, -6, -11.5, 12, -3.4);
+  addSolidWall(audGroup, -22, -1.65, 0.25, 0.3, 3.6, 23.5, mats.equitoneWhite);
+  addSolidWall(audGroup, -6, -1.65, 0.25, 0.3, 3.6, 23.5, mats.equitoneWhite);
+  addSolidWall(audGroup, -14, -1.65, -11.5, 16, 3.6, 0.3, mats.fairConcrete);
+  addSolidWall(audGroup, -14, -1.65, 12, 16, 3.6, 0.3, mats.fairConcrete);
 
-  // Muros perimetrales de concreto y revestimiento acústico de madera cálida
-  addSolidWall(audGroup, -10.3, -1.65, 3.5, 0.32, 3.6, 11.4, mats.equitoneWhite);
-  addSolidWall(audGroup, 3.1, -1.65, 3.5, 0.32, 3.6, 11.4, mats.equitoneWhite);
-  addSolidWall(audGroup, -3.6, -1.65, 9.1, 13.6, 3.6, 0.32, mats.fairConcrete);
-  addSolidWall(audGroup, -7.9, -1.65, -2.1, 4.8, 3.6, 0.32, mats.fairConcrete);
-  addSolidWall(audGroup, 0.7, -1.65, -2.1, 4.8, 3.6, 0.32, mats.fairConcrete);
-
-  // Techo del auditorio bajo la plazoleta (dejando abierto el pozo de la gran escalera de acceso x: -5.5 .. -1.7, z: -2.1 .. +3.5)
-  const audCeilingBack = new THREE.Mesh(new THREE.BoxGeometry(13.6, 0.24, 5.6), mats.fairConcrete);
-  audCeilingBack.position.set(-3.6, -0.06, 6.3);
-  audGroup.add(audCeilingBack);
-
-  // Escalera ancha de descenso desde la Entrada Principal (z = -1.8, y = +0.12 m -> z = +3.2, y = -3.40 m)
-  const audSteps = 14;
-  for (let s = 0; s < audSteps; s++) {
-    const t = (s + 0.5) / audSteps;
-    const stepY = 0.12 - t * 3.52;
-    const stepZ = -1.8 + t * 5.0;
-    const stepMesh = new THREE.Mesh(new THREE.BoxGeometry(3.5, 0.26, 0.42), mats.slabGrey);
-    stepMesh.position.set(-3.6, stepY - 0.13, stepZ);
-    stepMesh.receiveShadow = true;
-    audGroup.add(stepMesh);
-    if (s % 2 === 0) walkableTeleportMeshes.push(stepMesh);
+  // 14 peldaños, soporte continuo y teletransporte en cada escalón.
+  for (let i = 0; i < 14; i++) {
+    const t = (i + 0.5) / 14;
+    const step = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.25, 0.4), mats.slabGrey);
+    step.position.set(-14.9, 0.12 - t * 3.52 - 0.125, 5.4 + t * 5);
+    step.receiveShadow = true;
+    audGroup.add(step);
+    walkableTeleportMeshes.push(step);
   }
   supportRamps.push({
-    xMin: -5.45,
-    xMax: -1.75,
-    zMin: -2.0,
-    zMax: 3.4,
-    yAt: (_x, z) => {
-      const u = Math.max(0, Math.min(1, (z - (-1.8)) / 5.0));
-      return 0.12 - u * 3.52;
-    }
+    xMin: -16.6, xMax: -13.2, zMin: 5.4, zMax: 10.4,
+    minRefY: -4, maxRefY: 0.8,
+    yAt: (_x, z) => 0.12 - Math.max(0, Math.min(1, (z - 5.4) / 5)) * 3.52
   });
-
-  // Barandas de vidrio y acero alrededor del pozo de acceso al Auditorio Subterráneo en la Plazoleta
-  addSolidWall(audGroup, -5.5, 0.58, 0.8, 0.1, 0.96, 5.6, mats.glassFacade, false);
-  addSolidWall(audGroup, -1.7, 0.58, 0.8, 0.1, 0.96, 5.6, mats.glassFacade, false);
-  const audEntranceSign = new THREE.Mesh(
-    new THREE.PlaneGeometry(3.2, 0.65),
-    new THREE.MeshBasicMaterial({
-      map: makeSignTexture('#0f172a', '#f8fafc', 'AUDITORIO PRINCIPAL CyT', 'Nivel Subterráneo (-1) · Cap. 247', '#f43f5e'),
-      side: THREE.DoubleSide
-    })
-  );
-  audEntranceSign.position.set(-3.6, 2.35, -1.85);
+  // La puerta ancha queda abierta y es transitable.
+  for (const x of [-16.7, -13.1]) {
+    addSolidWall(audGroup, x, 1.45, 5.35, 0.18, 2.9, 0.22, mats.crispWhite);
+  }
+  addSolidWall(audGroup, -14.9, 2.85, 5.35, 3.8, 0.18, 0.22, mats.crispWhite);
+  const audEntranceSign = new THREE.Mesh(new THREE.PlaneGeometry(3.4, 0.55),
+    new THREE.MeshBasicMaterial({ map: makeSignTexture('#0f172a', '#f8fafc', 'AUDITORIO PRINCIPAL', 'Acceso interior · Nivel -1', '#f43f5e'), side: THREE.DoubleSide }));
+  audEntranceSign.position.set(-14.9, 3.12, 5.34);
   audGroup.add(audEntranceSign);
 
-  // Tarima del escenario (al fondo sur del auditorio z = 7.6), atril UNAL y gran pantalla de proyección
-  const audStage = new THREE.Mesh(new THREE.BoxGeometry(9.6, 0.42, 2.2), mats.woodFloor);
-  audStage.position.set(-3.6, -3.19, 7.6);
-  audStage.receiveShadow = true;
+  const audStage = new THREE.Mesh(new THREE.BoxGeometry(12.4, 0.42, 2.5), mats.woodFloor);
+  audStage.position.set(-14, -3.19, -9.6);
   audGroup.add(audStage);
-  registerSlab(audStage, -8.4, 1.2, 6.5, 8.7, -2.98);
-
-  const audScreen = new THREE.Mesh(
-    new THREE.PlaneGeometry(6.2, 2.5),
-    new THREE.MeshBasicMaterial({
-      map: makeSlideTexture(
-        'FACULTAD DE INGENIERÍA · UNAL BOGOTÁ',
-        'Auditorio Edificio 454 Ciencia y Tecnología — Dinámica Estructural',
-        ['• Monitoreo Sísmico STA/LTA en Raspberry Pi 5', '• Localización Pasiva Wi-Fi/BLE Pre-Sismo (t₀)', '• Resiliencia de Enlace hacia Gateway Exterior'],
-        '#f43f5e'
-      )
-    })
-  );
-  audScreen.position.set(-3.6, -1.55, 8.88);
-  audScreen.rotation.y = Math.PI;
+  registerSlab(audStage, -20.2, -7.8, -10.85, -8.35, -2.98);
+  const audScreen = new THREE.Mesh(new THREE.PlaneGeometry(7, 2.4), new THREE.MeshBasicMaterial({
+    map: makeSlideTexture('FACULTAD DE INGENIERÍA · UNAL BOGOTÁ', 'Auditorio Ciencia y Tecnología',
+      ['Monitoreo sísmico', 'Ingeniería y tecnología'], '#f43f5e'), side: THREE.DoubleSide
+  }));
+  audScreen.position.set(-14, -1.52, -11.3);
   audGroup.add(audScreen);
-
-  // Atril del conferencista
-  addSolidWall(audGroup, -1.2, -2.45, 7.1, 0.62, 1.08, 0.48, mats.auditoriumWood);
-
-  // Listones acústicos claros en el cielorraso y paneles de madera del fondo.
-  for (let x = -9; x <= 2; x += 1.4) {
-    batcher.add('aud_ceiling_wood', geos.unitBox, mats.auditoriumWood, x, -0.22, 6.0,
-      0, 0, 0, 0.12, 0.06, 4.8);
-  }
-
-  // Gradería escalonada de butacas vinotinto del Auditorio (5 filas x 12 sillas instanciadas = 60 butacas en 2 draw calls!)
-  for (let r = 0; r < 5; r++) {
-    const rowZ = 3.6 + r * 0.72;
-    const tierY = -3.35 + (4 - r) * 0.14;
-    batcher.add('aud_riser', geos.unitBox, mats.auditoriumCarpet, -3.6, tierY - 0.08, rowZ, 0, 0, 0, 10.6, 0.16, 0.68, false, true);
-    for (let c = -5; c <= 5; c++) {
-      if (c === 0) continue; // Pasillo central del auditorio
-      const sx = -3.6 + c * 0.86;
-      batcher.add('aud_seat_base', geos.unitBox, mats.auditoriumSeat, sx, tierY + 0.22, rowZ, 0, 0, 0, 0.56, 0.14, 0.48, false, true);
-      batcher.add('aud_seat_back', geos.unitBox, mats.auditoriumSeat, sx, tierY + 0.52, rowZ - 0.2, -0.12, 0, 0, 0.56, 0.54, 0.1, false, true);
-      batcher.add('aud_chair_leg', geos.unitBox, mats.darkMetal, sx, tierY + 0.12, rowZ, 0, 0, 0, 0.09, 0.24, 0.35);
-      batcher.add('aud_armrest', geos.unitBox, mats.auditoriumWood, sx + 0.31, tierY + 0.35, rowZ, 0, 0, 0, 0.07, 0.07, 0.5);
+  addSolidWall(audGroup, -9.2, -2.45, -9.1, 0.62, 1.08, 0.48, mats.auditoriumWood);
+  // Pasillos entre bloques de butacas; la cifra no pretende representar capacidad real.
+  for (let r = 0; r < 12; r++) {
+    const z = -7.6 + r * 1.25;
+    for (let c = 0; c < 18; c++) {
+      if (c === 5 || c === 12) continue;
+      const x = -21.1 + c * 0.83;
+      batcher.add('aud_seat_base', geos.unitBox, mats.auditoriumSeat, x, -3.15, z, 0, 0, 0, 0.6, 0.15, 0.52);
+      batcher.add('aud_seat_back', geos.unitBox, mats.auditoriumSeat, x, -2.85, z + 0.25, 0.1, 0, 0, 0.6, 0.55, 0.1);
+      batcher.add('aud_chair_leg', geos.unitBox, mats.darkMetal, x, -3.28, z, 0, 0, 0, 0.08, 0.24, 0.35);
     }
   }
 
@@ -662,8 +625,20 @@ export function buildCytCampusAndBuilding({
       addRail(-15.6, yTop, 0.3, 9.0, 'z');
       addRail(-17.3, yTop, -4.2, 3.4, 'x');
       addRail(-17.3, yTop, 4.8, 3.4, 'x');
+    } else if (fl === 0) {
+      // Vano interior a la escalera del auditorio bajo la biblioteca.
+      for (const [cx, cz, w, d] of [
+        [-19.65, 0, 5.7, 23], [-12.75, 0, 0.5, 23],
+        [-14.9, -3.05, 3.8, 16.9], [-14.9, 11.1, 3.8, 0.8]
+      ]) {
+        const slab = new THREE.Mesh(new THREE.BoxGeometry(w, 0.24, d), floorMat);
+        slab.position.set(cx, yTop - 0.12, cz);
+        slab.receiveShadow = true;
+        buildingGroup.add(slab);
+        registerSlab(slab, cx - w / 2, cx + w / 2, cz - d / 2, cz + d / 2, yTop);
+      }
     } else {
-      // Piso 1, Piso 2 (base de la Biblioteca) y Piso 5 (Gran Terraza Abierta SIN TECHO sobre el Ala Occidental!)
+      // Piso 2 (base de la Biblioteca) y Piso 5 (Gran Terraza Abierta SIN TECHO sobre el Ala Occidental!)
       const slabW = new THREE.Mesh(new THREE.BoxGeometry(10.0, 0.24, 23.0), floorMat);
       slabW.position.set(-17.5, yTop - 0.12, 0);
       slabW.receiveShadow = true;
@@ -725,17 +700,19 @@ export function buildCytCampusAndBuilding({
   // Muro cortina de la biblioteca detrás de las rampas; pasajes abiertos en ambos extremos.
   for (let fl = 0; fl <= 3; fl++) {
     const yBase = 0.12 + fl * FLOOR_HEIGHT;
-    const facade = new THREE.Mesh(new THREE.PlaneGeometry(17, 3.05), mats.glassFacade);
+    const facade = new THREE.Mesh(new THREE.PlaneGeometry(fl === 0 ? 10 : 17, 3.05), mats.glassFacade);
     facade.rotation.y = Math.PI / 2;
-    facade.position.set(-12.46, yBase + 1.55, 0);
+    facade.position.set(-12.46, yBase + 1.55, fl === 0 ? -3.5 : 0);
     buildingGroup.add(facade);
-    addWallCollider(-12.46, yBase + 1.55, 0, 0.12, 3.05, 17);
+    addWallCollider(-12.46, yBase + 1.55, fl === 0 ? -3.5 : 0, 0.12, 3.05, fl === 0 ? 10 : 17);
+    if (fl === 0) addWallCollider(-12.46, yBase + 1.55, 7.5, 0.12, 3.05, 2);
     for (let z = -8.4; z <= 8.4; z += 1.4) {
+      if (fl === 0 && z > 1.5 && z < 6.5) continue;
       batcher.add('library_curtain_mullion', geos.unitBox, mats.crispWhite,
         -12.42, yBase + 1.55, z, 0, 0, 0, 0.07, 3.05, 0.07);
     }
     batcher.add('library_curtain_crossbar', geos.unitBox, mats.steelRail,
-      -12.42, yBase + 1.15, 0, 0, 0, 0, 0.08, 0.06, 17);
+      -12.42, yBase + 1.15, fl === 0 ? -3.5 : 0, 0, 0, 0, 0.08, 0.06, fl === 0 ? 10 : 17);
   }
 
   // Barandas perimetrales de la Gran Terraza Abierta (SIN TECHO) en el Piso 5 del Ala Occidental (y = 13.72 m)
@@ -749,9 +726,9 @@ export function buildCytCampusAndBuilding({
   // ============================================================================
   // Conectan Piso 1 (0.12m) -> Piso 2 (3.52m) -> Piso 3 (6.92m) -> Piso 4 (10.32m) sobre la fachada interior de la Biblioteca
   const rampDefs = [
-    { zStart: 8.8, zEnd: -8.2, yStart: 0.12, yEnd: 3.52, xCenter: -11.15 },
-    { zStart: -8.2, zEnd: 8.8, yStart: 3.52, yEnd: 6.92, xCenter: -11.15 },
-    { zStart: 8.8, zEnd: -8.2, yStart: 6.92, yEnd: 10.32, xCenter: -11.15 }
+    { zStart: 8.8, zEnd: -8.2, yStart: 0.12, yEnd: 3.52, xCenter: -11.8 },
+    { zStart: -8.2, zEnd: 8.8, yStart: 3.52, yEnd: 6.92, xCenter: -10.55 },
+    { zStart: 8.8, zEnd: -8.2, yStart: 6.92, yEnd: 10.32, xCenter: -11.8 }
   ];
 
   rampDefs.forEach((rd, idx) => {
@@ -760,7 +737,7 @@ export function buildCytCampusAndBuilding({
     const len = Math.hypot(dz, dy);
     const pitch = Math.atan2(dy, Math.abs(dz)) * (dz > 0 ? -1 : 1);
 
-    const rampMesh = new THREE.Mesh(new THREE.BoxGeometry(2.15, 0.2, len), mats.crispWhite);
+    const rampMesh = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.2, len), mats.crispWhite);
     rampMesh.position.set(rd.xCenter, (rd.yStart + rd.yEnd) * 0.5 - 0.1, (rd.zStart + rd.zEnd) * 0.5);
     rampMesh.rotation.x = pitch;
     rampMesh.castShadow = true;
@@ -771,13 +748,13 @@ export function buildCytCampusAndBuilding({
     // Barandas metálicas blancas a ambos lados de cada rampa (Foto #2!)
     for (let h = 0.18; h <= 1.02; h += 0.21) {
       const rail = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.035, len), mats.steelRail);
-      rail.position.set(rd.xCenter + 1.02, (rd.yStart + rd.yEnd) * 0.5 + h, (rd.zStart + rd.zEnd) * 0.5);
+      rail.position.set(rd.xCenter + 0.52, (rd.yStart + rd.yEnd) * 0.5 + h, (rd.zStart + rd.zEnd) * 0.5);
       rail.rotation.x = pitch;
       buildingGroup.add(rail);
     }
     for (let i = 0; i <= 14; i++) {
       const t = i / 14;
-      batcher.add('ramp_rail_posts', geos.unitBox, mats.steelRail, rd.xCenter + 1.02,
+      batcher.add('ramp_rail_posts', geos.unitBox, mats.steelRail, rd.xCenter + 0.52,
         rd.yStart + t * dy + 0.52, rd.zStart + t * dz, 0, 0, 0, 0.05, 1.04, 0.05);
     }
 
@@ -793,8 +770,8 @@ export function buildCytCampusAndBuilding({
     const zMin = Math.min(rd.zStart, rd.zEnd);
     const zMax = Math.max(rd.zStart, rd.zEnd);
     supportRamps.push({
-      xMin: rd.xCenter - 1.15,
-      xMax: rd.xCenter + 1.15,
+      xMin: rd.xCenter - 0.56,
+      xMax: rd.xCenter + 0.56,
       zMin,
       zMax,
       minRefY: rd.yStart - 0.8,
@@ -820,18 +797,28 @@ export function buildCytCampusAndBuilding({
   for (let fl = 0; fl < 5; fl++) {
     const yTop = 0.12 + fl * FLOOR_HEIGHT;
     const mat = fl === 0 ? mats.slabGrey : fl === 4 ? mats.classroomFloor : mats.classroomFloor;
-    const northSlab = new THREE.Mesh(new THREE.BoxGeometry(30.0, 0.24, 9.0), mat);
-    northSlab.position.set(2.5, yTop - 0.12, -7.0);
+    const northSlab = new THREE.Mesh(new THREE.BoxGeometry(24.8, 0.24, 9.0), mat);
+    northSlab.position.set(2.4, yTop - 0.12, -7.0);
     northSlab.receiveShadow = true;
     buildingGroup.add(northSlab);
-    registerSlab(northSlab, -12.5, 17.5, -11.5, -2.5, yTop);
+    registerSlab(northSlab, -10, 14.8, -11.5, -2.5, yTop);
+    // El descanso norte conecta la biblioteca, sin una losa atravesando la rampa.
+    const northLanding = new THREE.Mesh(new THREE.BoxGeometry(2.5, 0.24, 3.3), mat);
+    northLanding.position.set(-11.25, yTop - 0.12, -9.85);
+    buildingGroup.add(northLanding);
+    registerSlab(northLanding, -12.5, -10, -11.5, -8.2, yTop);
+    // Aterrizaje sur; el resto se deja libre para los dos tramos de escalera.
+    const stairLanding = new THREE.Mesh(new THREE.BoxGeometry(2.5, 0.24, 1.2), mat);
+    stairLanding.position.set(16.05, yTop - 0.12, -3.1);
+    buildingGroup.add(stairLanding);
+    registerSlab(stairLanding, 14.8, 17.3, -3.7, -2.5, yTop);
 
     // Corredor exterior abierto hacia la Plazoleta en Pisos 2, 3 y 4 con baranda blanca (Fotos #2 y #3!)
     if (fl >= 1 && fl <= 3) {
       // Bandas blancas de borde, el rasgo horizontal continuo de la fachada hacia la plaza.
       batcher.add('north_balcony_fascia', geos.unitBox, mats.crispWhite,
         1.0, yTop - 0.04, -2.55, 0, 0, 0, 27.0, 0.52, 0.28, true, true);
-      addRail(1.2, yTop + 0.12, -2.58, 27.2, 'x');
+      addRail(2.55, yTop + 0.12, -2.58, 24.5, 'x');
       // Tiras LED lineales en el cielo raso de cada piso
       for (let lx = -10; lx <= 12; lx += 5.5) {
         batcher.add('ceiling_led', geos.unitBox, mats.ledStrip, lx, yTop + FLOOR_HEIGHT - 0.16, -7.8, 0, 0, 0, 2.8, 0.04, 0.18, false, false);
@@ -843,8 +830,10 @@ export function buildCytCampusAndBuilding({
   // Columnas estructurales de concreto a la vista ("Pilotis" abiertos en Primer Piso, Foto #2 y #3!)
   for (let cx = -11.5; cx <= 14.5; cx += 6.5) {
     [-11.1, -4.5, -2.8].forEach((cz) => {
-      batcher.add('main_piloti', geos.unitBox, mats.fairConcrete, cx, 6.9, cz, 0, 0, 0, 0.42, 13.8, 0.42, true, true);
-      addWallCollider(cx, 6.9, cz, 0.42, 13.8, 0.42);
+      // La rampa occidental debe permanecer libre de columnas.
+      const postX = cx === -11.5 && cz > -10 ? -9.5 : cx;
+      batcher.add('main_piloti', geos.unitBox, mats.fairConcrete, postX, 6.9, cz, 0, 0, 0, 0.42, 13.8, 0.42, true, true);
+      addWallCollider(postX, 6.9, cz, 0.42, 13.8, 0.42);
     });
   }
 
@@ -936,8 +925,8 @@ export function buildCytCampusAndBuilding({
   // ============================================================================
   // Helper para mampara frontal con puerta abierta transitable (z = -4.5)
   const addRoomFrontWithDoor = (xLeft, xRight, yBase, labelText, accent = '#38bdf8') => {
-    const doorW = 1.45;
-    const doorX = xLeft + 1.35;
+    const doorW = Math.min(1.8, xRight - xLeft - 0.25);
+    const doorX = Math.min(xLeft + 2.1, (xLeft + xRight) * 0.5);
     const leftSegW = doorX - doorW * 0.5 - xLeft;
     const rightSegW = xRight - (doorX + doorW * 0.5);
     if (leftSegW > 0.15) {
@@ -984,7 +973,7 @@ export function buildCytCampusAndBuilding({
   }
 
   // Baños Piso 1 junto a recepción (x: -12.4 .. -10.6, z: -11.3 .. -5.2)
-  addRoomFrontWithDoor(-12.4, -10.5, 0.12, 'BAÑOS P1', '#14b8a6');
+  addRoomFrontWithDoor(11.2, 14.6, 0.12, 'BAÑOS P1', '#14b8a6');
 
   // Mesas de estudio grupal en Piso 1 Ala Occidental (Hemeroteca)
   for (let mz = -7.5; mz <= 7.5; mz += 3.8) {
@@ -992,6 +981,20 @@ export function buildCytCampusAndBuilding({
     batcher.add('lib_chair', geos.unitBox, mats.chairCharcoal, -17.5 - 0.8, 0.56, mz - 0.82, 0, 0, 0, 0.48, 0.52, 0.48);
     batcher.add('lib_chair', geos.unitBox, mats.chairCharcoal, -17.5 + 0.8, 0.56, mz + 0.82, 0, Math.PI, 0, 0.48, 0.52, 0.48);
   }
+
+  // Biblioteca de primer piso: colección, préstamo y lectura, con pasillo libre hacia la puerta.
+  for (const z of [-8, -4.5, -1, 2.5, 6]) {
+    batcher.add('ground_shelf', geos.unitBox, mats.deskWhite, -20.3, 1.15, z, 0, 0, 0, 2.8, 2.05, 0.55, true, true);
+    for (const h of [0.55, 1.05, 1.55])
+      batcher.add('ground_books', geos.unitBox, mats.bookSpines, -20.3, h, z, 0, 0, 0, 2.6, 0.32, 0.58);
+  }
+  batcher.add('ground_library_desk', geos.unitBox, mats.cytYellow, -18.0, 0.7, 3.0, 0, 0, 0, 2.8, 1.16, 0.8);
+  const librarySign = new THREE.Mesh(new THREE.PlaneGeometry(3.8, 0.5), new THREE.MeshBasicMaterial({
+    map: makeSignTexture('#0f172a', '#f8fafc', 'BIBLIOTECA · PRIMER PISO', 'Colección y lectura', '#eab308'), side: THREE.DoubleSide
+  }));
+  librarySign.rotation.y = Math.PI / 2;
+  librarySign.position.set(-12.35, 2.8, 4.1);
+  buildingGroup.add(librarySign);
 
   // --- 6B. BIBLIOTECA DE CIENCIA Y TECNOLOGÍA (ALA OCCIDENTAL PISOS 2, 3 Y 4 — Fotos #1 y #5!) ---
   for (let fl = 1; fl <= 3; fl++) {
@@ -1055,7 +1058,7 @@ export function buildCytCampusAndBuilding({
     });
 
     const isP4ComputerWing = floorNum === 4;
-    addRoomFrontWithDoor(-12.2, -4.4, yB, isP4ComputerWing ? `SALA CÓMPUTO ${floorNum}01` : `SALÓN ${floorNum}01`, '#38bdf8');
+    addRoomFrontWithDoor(-10.0, -4.4, yB, isP4ComputerWing ? `SALA CÓMPUTO ${floorNum}01` : `SALÓN ${floorNum}01`, '#38bdf8');
     addRoomFrontWithDoor(-4.4, 3.4, yB, isP4ComputerWing ? `SALA CÓMPUTO ${floorNum}02` : `SALÓN ${floorNum}02`, '#38bdf8');
     addRoomFrontWithDoor(
       3.4,
@@ -1142,56 +1145,38 @@ export function buildCytCampusAndBuilding({
   addRail(1.2, yCafe, -2.58, 27.2, 'x');
   addSolidWall(buildingGroup, 2.5, yCafe + 0.54, -11.42, 29.8, 1.05, 0.1, mats.glassFacade, false);
 
-  // CUBIERTA / PÉRGOLA BLANCA RETICULADA EXCLUSIVAMENTE SOBRE LA PARTE DE LA CAFETERÍA (x = -2.2 .. +16.8, z = -11.5 .. -2.5)!
-  // (El resto del último piso sobre el Ala Occidental x = -22.5 .. -2.2 queda 100% DESCUBIERTO / SIN TECHO tal como en el edificio real!)
-  const cafeRoofY = yCafe + 3.35;
-  for (let px = -2.0; px <= 16.5; px += 3.7) {
-    // Columnas blancas que sostienen la pérgola de la cafetería
-    batcher.add('cafe_col', geos.unitBox, mats.crispWhite, px, yCafe + 1.68, -11.1, 0, 0, 0, 0.26, 3.35, 0.26, true, true);
-    batcher.add('cafe_col', geos.unitBox, mats.crispWhite, px, yCafe + 1.68, -3.0, 0, 0, 0, 0.26, 3.35, 0.26, true, true);
-    // Vigas transversales blancas de la cubierta de la cafetería (Foto #1, #2, #3 y #4!)
-    batcher.add('cafe_beam_z', geos.unitBox, mats.crispWhite, px, cafeRoofY, -7.05, 0, 0, 0, 0.24, 0.34, 9.2, true, false);
+  // Cafetería en la parte central frontal de la terraza; a la derecha, mesas sin cubierta.
+  const cafeRoofY = yCafe + 3.1;
+  for (let x = -7.5; x <= 2.5; x += 2.5) {
+    for (const z of [-11.0, -3.1])
+      batcher.add('cafe_col', geos.unitBox, mats.crispWhite, x, yCafe + 1.55, z, 0, 0, 0, 0.18, 3.1, 0.18);
+    batcher.add('cafe_beam_z', geos.unitBox, mats.crispWhite, x, cafeRoofY, -7.05, 0, 0, 0, 0.2, 0.22, 8.0);
   }
-  for (let pz = -11.1; pz <= -3.0; pz += 1.62) {
-    batcher.add('cafe_beam_x', geos.unitBox, mats.crispWhite, 7.25, cafeRoofY + 0.06, pz, 0, 0, 0, 19.2, 0.18, 0.16, true, false);
-  }
-  const cafeSkylight = new THREE.Mesh(new THREE.PlaneGeometry(19.0, 8.8), mats.skylightPoly);
-  cafeSkylight.rotation.x = -Math.PI / 2;
-  cafeSkylight.position.set(7.25, cafeRoofY + 0.18, -7.05);
-  buildingGroup.add(cafeSkylight);
-
-  // Cerramiento acristalado de la cafetería, con dos pasos desde el corredor-terraza.
-  for (const [cx, width] of [[-1.2, 1.8], [4.8, 5.0], [12.0, 5.5]]) {
-    const panel = new THREE.Mesh(new THREE.PlaneGeometry(width, 3.0), mats.glassFacade);
-    panel.position.set(cx, yCafe + 1.55, -4.35);
+  for (let z = -11; z <= -3; z += 1.5)
+    batcher.add('cafe_beam_x', geos.unitBox, mats.crispWhite, -2.5, cafeRoofY, z, 0, 0, 0, 10, 0.18, 0.16);
+  const cafeRoof = new THREE.Mesh(new THREE.PlaneGeometry(10, 8), mats.skylightPoly);
+  cafeRoof.rotation.x = -Math.PI / 2;
+  cafeRoof.position.set(-2.5, cafeRoofY + 0.1, -7.05);
+  buildingGroup.add(cafeRoof);
+  // Cerramiento frontal y acceso ancho desde el corredor de terraza.
+  for (const [x, w] of [[-6.0, 3.0], [1.1, 2.8]]) {
+    const panel = new THREE.Mesh(new THREE.PlaneGeometry(w, 2.7), mats.glassFacade);
+    panel.position.set(x, yCafe + 1.35, -4.35);
     buildingGroup.add(panel);
-    addWallCollider(cx, yCafe + 1.55, -4.35, width, 3.0, 0.12);
+    addWallCollider(x, yCafe + 1.35, -4.35, w, 2.7, 0.12);
   }
-  for (let x = -2; x <= 15; x += 1.4) {
-    batcher.add('cafe_glass_mullions', geos.unitBox, mats.steelRail, x, yCafe + 1.55, -4.35,
-      0, 0, 0, 0.045, 3.1, 0.045);
-  }
-
-  // Barra de Atención de la Cafetería CyT (x: 11.2 .. 14.4, z: -10.6 .. -5.6)
-  addSolidWall(buildingGroup, 12.6, yCafe + 0.58, -8.2, 1.1, 1.14, 4.6, mats.auditoriumWood);
-  addSolidWall(buildingGroup, 14.1, yCafe + 1.35, -8.2, 0.45, 2.6, 4.8, mats.equitoneWhite);
-  const cafeSign = new THREE.Mesh(
-    new THREE.PlaneGeometry(3.4, 0.72),
-    new THREE.MeshBasicMaterial({
-      map: makeSignTexture('#7f1d1d', '#fef2f2', 'CAFETERÍA TERRAZA CyT', 'Café Colombiano · Almuerzos · Onces', '#fbbf24')
-    })
-  );
-  cafeSign.position.set(13.84, yCafe + 2.15, -8.2);
-  cafeSign.rotation.y = -Math.PI / 2;
+  addSolidWall(buildingGroup, -6.6, yCafe + 0.6, -8.5, 0.9, 1.2, 2.6, mats.auditoriumWood);
+  const cafeSign = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 0.6), new THREE.MeshBasicMaterial({
+    map: makeSignTexture('#7f1d1d', '#fef2f2', 'CAFETERÍA TERRAZA', 'Café · Almuerzos · Onces', '#fbbf24'), side: THREE.DoubleSide
+  }));
+  cafeSign.position.set(-2.5, yCafe + 2.7, -4.3);
   buildingGroup.add(cafeSign);
-
-  // Mesas y sillas rojas/grises de la Cafetería Cubierta (como se ven desde abajo en Foto #3!)
-  for (let mx = -0.5; mx <= 9.5; mx += 2.5) {
-    for (let mz = -9.6; mz <= -4.8; mz += 2.4) {
-      batcher.add('cafe_table', geos.unitBox, mats.deskWhite, mx, yCafe + 0.74, mz, 0, 0, 0, 0.95, 0.06, 0.95, true, true);
-      batcher.add('cafe_leg', geos.cylPost, mats.steelRail, mx, yCafe + 0.37, mz, 0, 0, 0, 1.2, 0.74, 1.2);
-      batcher.add('cafe_chair', geos.unitBox, mats.cafeRed, mx - 0.68, yCafe + 0.46, mz, 0, 0, 0, 0.44, 0.48, 0.44, true, false);
-      batcher.add('cafe_chair', geos.unitBox, mats.cafeRed, mx + 0.68, yCafe + 0.46, mz, 0, 0, 0, 0.44, 0.48, 0.44, true, false);
+  for (let x = 4.0; x <= 13.5; x += 2.8) {
+    for (let z = -9.5; z <= -5; z += 2.3) {
+      batcher.add('cafe_table', geos.unitBox, mats.deskWhite, x, yCafe + 0.74, z, 0, 0, 0, 0.95, 0.06, 0.95, true, true);
+      batcher.add('cafe_leg', geos.cylPost, mats.steelRail, x, yCafe + 0.37, z, 0, 0, 0, 1.2, 0.74, 1.2);
+      for (const dx of [-0.68, 0.68])
+        batcher.add('cafe_chair', geos.unitBox, mats.cafeRed, x + dx, yCafe + 0.46, z, 0, 0, 0, 0.44, 0.48, 0.44);
     }
   }
 
