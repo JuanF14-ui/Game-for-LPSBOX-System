@@ -1,6 +1,15 @@
-# LPSBOX · Simulador sísmico inspirado en CyT UNAL
+# LPSBOX System
 
-Simulador educativo 3D y WebXR para explorar un escenario de emergencia, el **Sniffer RPi 5 + MPU6050 interior** y un **Gateway exterior en un poste**. Es un sitio estático compatible con [GitHub Pages](https://juanf14-ui.github.io/Game-for-LPSBOX-System/).
+Simulador interactivo de emergencias sísmicas para PC, dispositivos táctiles y realidad virtual.
+
+## [▶ Jugar ahora](https://juanf14-ui.github.io/Game-for-LPSBOX-System/)
+
+**Enlace directo:** https://juanf14-ui.github.io/Game-for-LPSBOX-System/
+
+Abre el enlace y pulsa **Iniciar experiencia**. No necesitas instalar el juego.
+
+<details>
+<summary>Información del proyecto, controles y desarrollo</summary>
 
 ## Escenario
 
@@ -33,3 +42,5 @@ node --test tests/*.test.mjs
 El sitio usa Three.js incluido localmente y texturas procedurales; no requiere una compilación para Pages. `js/cytBuilding.js` agrupa objetos repetidos con `InstancedMesh`, y se limita la resolución de píxel y de sombras para reducir la carga. La fluidez depende de la GPU, resolución y visor; **60 FPS no están garantizados**. Las pruebas de simulación no sustituyen una prueba visual en navegador ni una prueba de WebXR con un visor físico.
 
 El puente opcional `python_rpi5_bridge/rpi5_lpsbox_bridge.py` conserva el modo de demostración de telemetría. Las estimaciones de presencia, RSSI y la deduplicación en el juego son modelos simplificados y no establecen un conteo fiable de personas en situaciones reales.
+
+</details>

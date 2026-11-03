@@ -203,7 +203,7 @@ export class LPSBoxScene3D {
     const h = container.clientHeight || window.innerHeight;
 
     this.camera = new THREE.PerspectiveCamera(50, w / h, 0.1, 180);
-    this.camera.position.set(18, 22, 37);
+    this.camera.position.set(14, 13.5, 43);
 
     try {
       this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
@@ -225,7 +225,7 @@ export class LPSBoxScene3D {
     this.controls.maxPolarAngle = Math.PI * 0.492;
     this.controls.minDistance = 0.9;
     this.controls.maxDistance = 54;
-    this.controls.target.set(-3, 6, -2);
+    this.controls.target.set(-4.5, 6.6, -2);
     this.controls.autoRotate = true;
     this.controls.autoRotateSpeed = 0.55;
     this.introOrbitActive = true;
@@ -372,13 +372,13 @@ export class LPSBoxScene3D {
     this.skyDome = new THREE.Mesh(skyGeo, skyMat);
     this.scene.add(this.skyDome);
 
-    this.ambientLight = new THREE.AmbientLight(0x9fb8db, 0.78);
+    this.ambientLight = new THREE.AmbientLight(0xffffff, 0.82);
     this.scene.add(this.ambientLight);
 
-    const hemi = new THREE.HemisphereLight(0x93c5fd, 0x111827, 0.65);
+    const hemi = new THREE.HemisphereLight(0xf4f7f8, 0x66715e, 0.78);
     this.scene.add(hemi);
 
-    this.sunLight = new THREE.DirectionalLight(0xf1f5f9, 1.35);
+    this.sunLight = new THREE.DirectionalLight(0xfff8ee, 1.3);
     this.sunLight.position.set(16, 28, 22);
     this.sunLight.castShadow = true;
     this.sunLight.shadow.mapSize.set(1024, 1024);
@@ -389,7 +389,7 @@ export class LPSBoxScene3D {
     this.sunLight.shadow.bias = -0.0005;
     this.scene.add(this.sunLight);
 
-    const coolRim = new THREE.DirectionalLight(0x38bdf8, 0.45);
+    const coolRim = new THREE.DirectionalLight(0xffffff, 0.18);
     coolRim.position.set(-18, 14, -14);
     this.scene.add(coolRim);
 
@@ -3816,8 +3816,8 @@ export class LPSBoxScene3D {
 
     if (mode === 'tactical') {
       this.controls.enabled = true;
-      this.camera.position.set(18, 22, 37);
-      this.controls.target.set(-3, 6, -2);
+      this.camera.position.set(14, 13.5, 43);
+      this.controls.target.set(-4.5, 6.6, -2);
     } else if (mode === 'gateway' || mode === 'pole') {
       this.controls.enabled = true;
       const focusY = this.sim.gatewayPoleState === 'down' ? 1.55 : 3.35;

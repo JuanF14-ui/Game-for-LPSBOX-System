@@ -249,10 +249,10 @@ export function buildCytCampusAndBuilding({
     equitoneWhite: new THREE.MeshStandardMaterial({ color: 0xf6f7f9, roughness: 0.42, metalness: 0.06 }),
      crispWhite: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.36, metalness: 0.08 }),
     fairConcrete: new THREE.MeshStandardMaterial({ map: concreteTex, roughness: 0.78, metalness: 0.05 }),
-    slabGrey: new THREE.MeshStandardMaterial({ color: 0xe2e6ec, roughness: 0.68, metalness: 0.05 }),
-    classroomFloor: new THREE.MeshStandardMaterial({ color: 0xd5dce4, roughness: 0.52, metalness: 0.08 }),
+    slabGrey: new THREE.MeshStandardMaterial({ color: 0xe9e8e3, roughness: 0.68, metalness: 0.05 }),
+    classroomFloor: new THREE.MeshStandardMaterial({ color: 0xe0dfda, roughness: 0.52, metalness: 0.08 }),
     itFloor: new THREE.MeshStandardMaterial({ color: 0xcbd5e1, roughness: 0.44, metalness: 0.12 }),
-    bathroomTile: new THREE.MeshStandardMaterial({ color: 0xe0f2fe, roughness: 0.28, metalness: 0.1 }),
+    bathroomTile: new THREE.MeshStandardMaterial({ color: 0xe9eceb, roughness: 0.28, metalness: 0.1 }),
     woodFloor: new THREE.MeshStandardMaterial({ map: woodTex, roughness: 0.45, metalness: 0.06 }),
     auditoriumWood: new THREE.MeshStandardMaterial({ color: 0x8b5a2b, roughness: 0.55, metalness: 0.06 }),
     bookSpines: new THREE.MeshStandardMaterial({ map: makeBookSpinesTexture(), roughness: 0.8 }),
@@ -262,9 +262,9 @@ export function buildCytCampusAndBuilding({
     steelRail: new THREE.MeshStandardMaterial({ color: 0xeef2f6, roughness: 0.28, metalness: 0.62 }),
     darkMetal: new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.38, metalness: 0.68 }),
     glassFacade: new THREE.MeshPhysicalMaterial({
-      color: 0xbae6fd,
+      color: 0xc2c9c8,
       transparent: true,
-      opacity: 0.3,
+      opacity: 0.24,
       roughness: 0.08,
       metalness: 0.1,
       side: THREE.DoubleSide,
@@ -673,7 +673,24 @@ export function buildCytCampusAndBuilding({
   }
 
   // Gran Muro Pórtico Blanco Sur y Occidental del Bloque de Biblioteca + Ventanales con Cortasoles Horizontales Blancos (Foto #1 y #2)
-  addSolidWall(buildingGroup, -17.5, 6.9, 11.45, 10.2, 13.8, 0.32, mats.crispWhite);
+  // Pórticos blancos en los extremos, con fachada acristalada y divisiones verticales.
+  // Las ventanas del extremo dejan ver la biblioteca, en lugar de una pared ciega de corte.
+  for (const x of [-22.25, -12.75]) {
+    addSolidWall(buildingGroup, x, 6.9, 11.45, 0.5, 13.8, 0.32, mats.crispWhite);
+  }
+  for (let fl = 0; fl < 4; fl++) {
+    const y = 0.12 + fl * FLOOR_HEIGHT;
+    const glass = new THREE.Mesh(new THREE.PlaneGeometry(9.0, 3.05), mats.glassFacade);
+    glass.position.set(-17.5, y + 1.57, 11.45);
+    buildingGroup.add(glass);
+    addWallCollider(-17.5, y + 1.57, 11.45, 9.0, 3.05, 0.18);
+    batcher.add('library_end_fascia', geos.unitBox, mats.crispWhite,
+      -17.5, y + 3.2, 11.51, 0, 0, 0, 9.5, 0.28, 0.28, true, true);
+    for (let x = -21.8; x < -13.2; x += 1.4) {
+      batcher.add('library_end_frame', geos.unitBox, mats.crispWhite,
+        x, y + 1.55, 11.49, 0, 0, 0, 0.07, 3.08, 0.09);
+    }
+  }
   addSolidWall(buildingGroup, -17.5, 6.9, -11.45, 10.2, 13.8, 0.32, mats.crispWhite);
 
   // Fachada occidental acristalada con los icónicos cortasoles horizontales blancos (Foto #1!)
@@ -811,7 +828,10 @@ export function buildCytCampusAndBuilding({
 
     // Corredor exterior abierto hacia la Plazoleta en Pisos 2, 3 y 4 con baranda blanca (Fotos #2 y #3!)
     if (fl >= 1 && fl <= 3) {
-      addRail(1.2, yTop, -2.58, 27.2, 'x');
+      // Bandas blancas de borde, el rasgo horizontal continuo de la fachada hacia la plaza.
+      batcher.add('north_balcony_fascia', geos.unitBox, mats.crispWhite,
+        1.0, yTop - 0.04, -2.55, 0, 0, 0, 27.0, 0.52, 0.28, true, true);
+      addRail(1.2, yTop + 0.12, -2.58, 27.2, 'x');
       // Tiras LED lineales en el cielo raso de cada piso
       for (let lx = -10; lx <= 12; lx += 5.5) {
         batcher.add('ceiling_led', geos.unitBox, mats.ledStrip, lx, yTop + FLOOR_HEIGHT - 0.16, -7.8, 0, 0, 0, 2.8, 0.04, 0.18, false, false);
@@ -930,6 +950,15 @@ export function buildCytCampusAndBuilding({
       glassUp.position.set(xRight - rightSegW * 0.5, yBase + 2.02, -4.55);
       buildingGroup.add(glassUp);
       addWallCollider(xRight - rightSegW * 0.5, yBase + 1.9, -4.55, rightSegW, 1.9, 0.16);
+      // Marcos blancos modulares de los ventanales y dintel de cada aula.
+      const paneCount = Math.max(1, Math.floor(rightSegW / 1.2));
+      for (let n = 0; n <= paneCount; n++) {
+        const x = xRight - rightSegW + n * rightSegW / paneCount;
+        batcher.add('classroom_window_frame', geos.unitBox, mats.crispWhite,
+          x, yBase + 2.02, -4.46, 0, 0, 0, 0.065, 1.85, 0.08);
+      }
+      batcher.add('classroom_window_sill', geos.unitBox, mats.crispWhite,
+        xRight - rightSegW * 0.5, yBase + 1.12, -4.46, 0, 0, 0, rightSegW, 0.08, 0.08);
     }
     // Placa señalética del espacio sobre el dintel
     const plaque = new THREE.Mesh(
