@@ -44,3 +44,19 @@ test('normal conversations do not direct players to the Gateway', () => {
   assert.ok(sim.people.some(p => p.partnerId));
   for (const person of sim.people) assert.doesNotMatch(person.basePhrase, /gateway|operari[oa]/i);
 });
+
+test('normal dialogue cycles through varied paired conversations without duplicate visible phrases', () => {
+  const sim = new LPSBoxSimulation();
+  sim.spawnPopulation({ S: 4, A: 4, B: 4, C: 4, D: 4, E: 4 });
+  const seen = new Set();
+  let peak = 0;
+  for (let cycle = 0; cycle < 16; cycle++) {
+    step(sim, 3.5);
+    const visible = sim.people.filter(p => p.speechVisible);
+    peak = Math.max(peak, visible.length);
+    assert.equal(new Set(visible.map(p => p.phrase)).size, visible.length);
+    visible.forEach(p => { seen.add(p.phrase); assert.doesNotMatch(p.phrase, /gateway|operari[oa]/i); });
+  }
+  assert.ok(peak > 5);
+  assert.ok(seen.size >= 30, `only ${seen.size} different phrases`);
+});
