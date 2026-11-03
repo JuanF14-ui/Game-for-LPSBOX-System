@@ -1,38 +1,17 @@
-// js/audio.js — Motor de Audio Web Audio API + Voces Habladas para NPCs y Sniffer LPSBOX (v3)
+// js/audio.js — Efectos ambientales y alertas no verbales con Web Audio API
 
 export class SoundEngine {
   constructor() {
     this.ctx = null;
     this.muted = false;
-    this.npcVoicesEnabled = true;
+    this._lastScreamAt = -Infinity;
     this.rumbleGain = null;
     this.rumbleOsc = null;
     this.noiseSource = null;
     this.noiseGain = null;
     this.alarmTimer = null;
 
-    this._cachedSpanishVoices = [];
-    this._snifferSpeakingUntil = 0;
-    this._lastNpcVoiceAt = 0;
     this._stepCooldown = 0;
-
-    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-      this._refreshVoices();
-      if (typeof window.speechSynthesis.addEventListener === 'function') {
-        window.speechSynthesis.addEventListener('voiceschanged', () => this._refreshVoices());
-      }
-    }
-  }
-
-  _refreshVoices() {
-    if (!('speechSynthesis' in window)) return;
-    try {
-      const all = window.speechSynthesis.getVoices() || [];
-      const es = all.filter((v) => /^es([-_]|$)/i.test(v.lang));
-      this._cachedSpanishVoices = es.length > 0 ? es : all.slice(0, 6);
-    } catch (_) {
-      this._cachedSpanishVoices = [];
-    }
   }
 
   ensureContext() {
@@ -45,9 +24,6 @@ export class SoundEngine {
     }
     if (this.ctx.state === 'suspended') {
       this.ctx.resume().catch(() => {});
-    }
-    if (this._cachedSpanishVoices.length === 0) {
-      this._refreshVoices();
     }
     return true;
   }
@@ -117,7 +93,37 @@ export class SoundEngine {
         } catch (_) {}
       }
       this.stopAlarmLoop();
+      this.stopEmergencySiren();
     }
+  }
+
+  playEmergencySiren() {
+    this.stopEmergencySiren();
+    if (!this.ensureContext()) return;
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(530, now);
+    for (let i = 0; i < 10; i++) {
+      osc.frequency.linearRampToValueAtTime(i % 2 ? 530 : 800, now + (i + 1) * 0.8);
+    }
+    gain.gain.setValueAtTime(0.001, now);
+    gain.gain.linearRampToValueAtTime(0.045, now + 1);
+    gain.gain.setValueAtTime(0.045, now + 6.6);
+    gain.gain.linearRampToValueAtTime(0.001, now + 8);
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+    this.emergencySiren = osc;
+    osc.onended = () => { if (this.emergencySiren === osc) this.emergencySiren = null; };
+    osc.start(now);
+    osc.stop(now + 8.1);
+  }
+
+  stopEmergencySiren() {
+    if (!this.emergencySiren) return;
+    try { this.emergencySiren.stop(); } catch (_) {}
+    this.emergencySiren = null;
   }
 
   updateSeismicRumble(accelG) {
@@ -444,116 +450,116 @@ export class SoundEngine {
   }
 
   // Subtle formant-filtered vocal inflection so NPCs always have audible vocal presence
-  _playVocalInflection(isFeminine = false, urgency = 'normal', volumeScale = 0.5) {
-    if (!this.ensureContext()) return;
+  playNpcScream(urgency = 'major', variantSeed = 0) {
+    if (this.muted || !this.ensureContext()) return;
+    const perfNow = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    const minGapMs = urgency === 'catastrophic' ? 850 : urgency === 'major' ? 1250 : 2100;
+    if (perfNow - this._lastScreamAt < minGapMs) return;
+    this._lastScreamAt = perfNow;
+
     const now = this.ctx.currentTime;
-    const baseF0 = isFeminine ? 225 : 132;
-    const urgentBoost = urgency === 'major' || urgency === 'trapped' || urgency === 'catastrophic' ? 1.32 : urgency === 'mild' ? 1.12 : 1.0;
+    const isFemale = variantSeed % 2 === 0;
 
-    const osc = this.ctx.createOscillator();
-    osc.type = 'sawtooth';
-    osc.frequency.setValueAtTime(baseF0 * urgentBoost, now);
-    osc.frequency.linearRampToValueAtTime(baseF0 * urgentBoost * 1.14, now + 0.08);
-    osc.frequency.linearRampToValueAtTime(baseF0 * urgentBoost * 0.94, now + 0.2);
+    if (urgency === 'trapped') {
+      // Golpes metálicos / concreto de persona atrapada bajo escombros + quejido amortiguado
+      [0, 0.19, 0.38].forEach((offset, idx) => {
+        const t = now + offset;
+        const tapOsc = this.ctx.createOscillator();
+        const tapGain = this.ctx.createGain();
+        tapOsc.type = 'triangle';
+        tapOsc.frequency.setValueAtTime(idx === 2 ? 410 : 370, t);
+        tapOsc.frequency.exponentialRampToValueAtTime(115, t + 0.085);
+        tapGain.gain.setValueAtTime(0.065, t);
+        tapGain.gain.exponentialRampToValueAtTime(0.0008, t + 0.095);
+        tapOsc.connect(tapGain);
+        tapGain.connect(this.ctx.destination);
+        tapOsc.start(t);
+        tapOsc.stop(t + 0.1);
+      });
 
-    const formant = this.ctx.createBiquadFilter();
-    formant.type = 'bandpass';
-    formant.frequency.value = isFeminine ? 760 : 580;
-    formant.Q.value = 3.2;
+      const groan = this.ctx.createOscillator();
+      const lp = this.ctx.createBiquadFilter();
+      const g = this.ctx.createGain();
+      groan.type = 'sawtooth';
+      const basePitch = isFemale ? 310 : 185;
+      groan.frequency.setValueAtTime(basePitch, now + 0.48);
+      groan.frequency.linearRampToValueAtTime(basePitch * 0.82, now + 0.92);
+      lp.type = 'bandpass';
+      lp.frequency.value = 540;
+      lp.Q.value = 3.2;
+      g.gain.setValueAtTime(0.0008, now + 0.46);
+      g.gain.linearRampToValueAtTime(0.032, now + 0.56);
+      g.gain.exponentialRampToValueAtTime(0.0006, now + 0.96);
+      groan.connect(lp);
+      lp.connect(g);
+      g.connect(this.ctx.destination);
+      groan.start(now + 0.46);
+      groan.stop(now + 0.98);
+      return;
+    }
 
-    const g = this.ctx.createGain();
-    const peak = 0.032 * Math.min(1, Math.max(0.15, volumeScale));
-    g.gain.setValueAtTime(0.0005, now);
-    g.gain.linearRampToValueAtTime(peak, now + 0.035);
-    g.gain.exponentialRampToValueAtTime(0.0005, now + 0.22);
+    if (urgency === 'mild') {
+      // Jadeo / exclamación corta de susto leve
+      const osc = this.ctx.createOscillator();
+      const f1 = this.ctx.createBiquadFilter();
+      const g = this.ctx.createGain();
+      const f0 = isFemale ? 340 + (variantSeed % 5) * 16 : 210 + (variantSeed % 5) * 12;
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(f0 * 0.9, now);
+      osc.frequency.exponentialRampToValueAtTime(f0 * 1.18, now + 0.09);
+      osc.frequency.exponentialRampToValueAtTime(f0 * 0.94, now + 0.24);
+      f1.type = 'bandpass';
+      f1.frequency.value = 720;
+      f1.Q.value = 4.0;
+      g.gain.setValueAtTime(0.001, now);
+      g.gain.linearRampToValueAtTime(0.028, now + 0.05);
+      g.gain.exponentialRampToValueAtTime(0.0006, now + 0.26);
+      osc.connect(f1);
+      f1.connect(g);
+      g.connect(this.ctx.destination);
+      osc.start(now);
+      osc.stop(now + 0.28);
+      return;
+    }
 
-    osc.connect(formant);
-    formant.connect(g);
-    g.connect(this.ctx.destination);
-    osc.start(now);
-    osc.stop(now + 0.23);
+    // Grito agudo / exclamación de pánico en terremoto fuerte o colapso (síntesis por dos formantes vocales)
+    const dur = urgency === 'catastrophic' ? 0.62 : 0.46;
+    const baseF = isFemale
+      ? 540 + (variantSeed % 7) * 28
+      : 295 + (variantSeed % 7) * 18;
+
+    const src = this.ctx.createOscillator();
+    src.type = 'sawtooth';
+    src.frequency.setValueAtTime(baseF * 0.86, now);
+    src.frequency.exponentialRampToValueAtTime(baseF * 1.26, now + dur * 0.28);
+    src.frequency.exponentialRampToValueAtTime(baseF * 0.76, now + dur);
+
+    const formant1 = this.ctx.createBiquadFilter();
+    formant1.type = 'bandpass';
+    formant1.frequency.value = isFemale ? 920 : 760;
+    formant1.Q.value = 4.2;
+
+    const formant2 = this.ctx.createBiquadFilter();
+    formant2.type = 'bandpass';
+    formant2.frequency.value = isFemale ? 1850 : 1420;
+    formant2.Q.value = 5.0;
+
+    const masterG = this.ctx.createGain();
+    const peakGain = urgency === 'catastrophic' ? 0.052 : 0.038;
+    masterG.gain.setValueAtTime(0.001, now);
+    masterG.gain.linearRampToValueAtTime(peakGain, now + 0.06);
+    masterG.gain.setValueAtTime(peakGain * 0.85, now + dur * 0.45);
+    masterG.gain.exponentialRampToValueAtTime(0.0006, now + dur);
+
+    src.connect(formant1);
+    src.connect(formant2);
+    formant1.connect(masterG);
+    formant2.connect(masterG);
+    masterG.connect(this.ctx.destination);
+
+    src.start(now);
+    src.stop(now + dur + 0.02);
   }
 
-  speakSnifferVoice(text) {
-    if (this.muted || !('speechSynthesis' in window)) return;
-    try {
-      this._snifferSpeakingUntil = performance.now() + 4800;
-      window.speechSynthesis.cancel();
-      const utter = new SpeechSynthesisUtterance(text);
-      utter.lang = 'es-CO';
-      utter.rate = 1.04;
-      utter.pitch = 0.96;
-      utter.volume = 0.92;
-      utter.onend = () => {
-        this._snifferSpeakingUntil = 0;
-      };
-      window.speechSynthesis.speak(utter);
-    } catch (_) {}
-  }
 
-  speakNpcDialogue(person, rawText, urgency = 'normal', distanceMeters = 10) {
-    if (this.muted || !this.npcVoicesEnabled) return;
-    const nowMs = performance.now();
-
-    // Never interrupt Sniffer hardware voice alerts
-    if (nowMs < this._snifferSpeakingUntil) return;
-
-    const minGapMs = urgency === 'normal' ? 4200 : urgency === 'mild' ? 2900 : 2300;
-    if (nowMs - this._lastNpcVoiceAt < minGapMs) return;
-
-    const isFeminine = (person?.id || 1) % 2 === 0;
-    const distAtten = Math.max(0.28, Math.min(1.0, 1.0 - (distanceMeters - 5) / 34));
-
-    // Clean emojis / symbols for crisp TTS pronunciation
-    const cleanText = String(rawText || '')
-      .replace(/[^\p{L}\p{N}\s,.;:¡!¿?-]/gu, '')
-      .trim();
-    if (!cleanText) return;
-
-    this._lastNpcVoiceAt = nowMs;
-
-    // Expressive micro-inflection cue
-    this._playVocalInflection(isFeminine, urgency, distAtten * 0.65);
-
-    if (!('speechSynthesis' in window)) return;
-    try {
-      if (window.speechSynthesis.speaking) {
-        // Only preempt calm chatter with urgent earthquake/trapped cries
-        if (urgency === 'normal' || urgency === 'mild') return;
-        window.speechSynthesis.cancel();
-      }
-
-      const utter = new SpeechSynthesisUtterance(cleanText);
-      utter.lang = 'es-CO';
-
-      if (this._cachedSpanishVoices.length > 0) {
-        const idx = (person?.id || 0) % this._cachedSpanishVoices.length;
-        utter.voice = this._cachedSpanishVoices[idx];
-      }
-
-      const idJitter = (((person?.id || 1) * 37) % 10 - 5) * 0.025;
-      const basePitch = (isFeminine ? 1.24 : 0.86) + idJitter;
-      const urgentPitch =
-        urgency === 'trapped' || urgency === 'catastrophic'
-          ? 1.14
-          : urgency === 'major'
-            ? 1.09
-            : urgency === 'mild'
-              ? 1.03
-              : 1.0;
-
-      utter.pitch = Math.max(0.65, Math.min(1.65, basePitch * urgentPitch));
-      utter.rate =
-        urgency === 'trapped' || urgency === 'catastrophic'
-          ? 1.18
-          : urgency === 'major'
-            ? 1.15
-            : urgency === 'mild'
-              ? 1.05
-              : 0.99;
-      utter.volume = Math.max(0.3, Math.min(0.95, distAtten * (urgency === 'normal' ? 0.62 : 0.9)));
-
-      window.speechSynthesis.speak(utter);
-    } catch (_) {}
-  }
 }

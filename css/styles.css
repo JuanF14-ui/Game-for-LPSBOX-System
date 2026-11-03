@@ -1883,3 +1883,49 @@ input[type="range"] {
 
 
 
+
+/* Controles secundarios plegados por defecto; el escenario conserva el protagonismo. */
+.hud-card { backdrop-filter: blur(10px); }
+.hud-card-header { gap: 0.6rem; }
+.collapse-btn:focus-visible, .cam-btn:focus-visible, .scenario-btn:focus-visible,
+.icon-btn:focus-visible, .floor-jump-btn:focus-visible {
+  outline: 2px solid #7dd3fc;
+  outline-offset: 2px;
+}
+
+.response-cinematic {
+  position: absolute;
+  z-index: 40;
+  bottom: 5.2rem;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 0.9rem 1.1rem;
+  border: 1px solid rgba(125, 211, 252, 0.45);
+  border-radius: 14px;
+  color: #f8fafc;
+  background: rgba(8, 18, 31, 0.94);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.4);
+  max-width: calc(100vw - 2rem);
+}
+.response-cinematic[hidden] { display: none; }
+.response-cinematic strong, .response-cinematic span { display: block; }
+.response-cinematic span { color: #cbd5e1; font-size: 0.85rem; margin-top: 0.2rem; }
+.response-cinematic button {
+  border: 1px solid #7dd3fc;
+  border-radius: 8px;
+  background: #102e46;
+  color: #fff;
+  padding: 0.55rem 0.85rem;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.response-cinematic button:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+@media (max-width: 600px) {
+  .response-cinematic { bottom: 1rem; width: calc(100% - 2rem); gap: 0.5rem; }
+  .response-cinematic span { font-size: 0.75rem; }
+}
+/* Durante la cinemática se oculta el HUD para no tapar la llegada; vuelve al terminar o saltar. */
+.cinematic-active #sim-hud, .cinematic-active #bottom-ticker { opacity: 0; pointer-events: none; }
