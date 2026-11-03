@@ -20,6 +20,24 @@ import {
   SNIFFER_WORLD_POS
 } from './simulation.js';
 
+let npcFabricTexture = null;
+function getNpcFabricTexture() {
+  if (npcFabricTexture) return npcFabricTexture;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = 64;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#e5e5e5';
+  ctx.fillRect(0, 0, 64, 64);
+  for (let i = 0; i < 64; i += 2) {
+    ctx.fillStyle = i % 4 ? 'rgba(90,90,90,0.09)' : 'rgba(255,255,255,0.22)';
+    ctx.fillRect(0, i, 64, 1);
+    ctx.fillRect(i, 0, 1, 64);
+  }
+  npcFabricTexture = new THREE.CanvasTexture(canvas);
+  npcFabricTexture.colorSpace = THREE.SRGBColorSpace;
+  return npcFabricTexture;
+}
+
 let cachedStlGeometry = null;
 const stlCallbacks = [];
 let stlLoadingStarted = false;
@@ -2161,10 +2179,10 @@ export class LPSBoxScene3D {
     const skinMat = new THREE.MeshStandardMaterial({ color: person.skinColor, roughness: 0.62 });
     const shirtMat = new THREE.MeshStandardMaterial({
       color: person.hasLabCoat ? '#f1f5f9' : person.color,
-      roughness: 0.55
+      roughness: 0.8, map: getNpcFabricTexture()
     });
     const accentMat = new THREE.MeshStandardMaterial({ color: person.color, roughness: 0.5 });
-    const pantsMat = new THREE.MeshStandardMaterial({ color: person.pantsColor, roughness: 0.78 });
+    const pantsMat = new THREE.MeshStandardMaterial({ color: person.pantsColor, roughness: 0.88, map: getNpcFabricTexture() });
     const shoeMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.85 });
 
     // Body root so crouch/kneel lowers smoothly
@@ -2198,6 +2216,9 @@ export class LPSBoxScene3D {
     torso.position.y = 1.07;
     torso.castShadow = true;
     bodyRoot.add(torso);
+    const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.105, 0.045, 12), accentMat);
+    collar.position.y = 1.31;
+    bodyRoot.add(collar);
 
     const badge = new THREE.Mesh(new THREE.PlaneGeometry(0.07, 0.09), accentMat);
     badge.position.set(0.09, 1.13, 0.115);
@@ -2219,6 +2240,12 @@ export class LPSBoxScene3D {
     const eyeR = new THREE.Mesh(new THREE.SphereGeometry(0.02, 8, 8), eyeMat);
     eyeR.position.set(0.052, 0.02, 0.142);
     headGroup.add(eyeL, eyeR);
+    const nose = new THREE.Mesh(new THREE.SphereGeometry(0.026, 8, 6), skinMat);
+    nose.position.set(0, -0.015, 0.157);
+    headGroup.add(nose);
+    const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.008, 0.008), new THREE.MeshStandardMaterial({ color: 0x75413b }));
+    mouth.position.set(0, -0.07, 0.14);
+    headGroup.add(mouth);
 
     // Hair / Safety Helmet variants
     const hairColors = [0x1c1917, 0x451a03, 0x78350f, 0x27272a];
@@ -2328,20 +2355,8 @@ export class LPSBoxScene3D {
         this.personMeshes.set(p.id, mesh);
       }
 
-      // Compute floor modal horizontal offset if inside building
-      const floorFloat = Math.max(0, Math.min(3, p.y / FLOOR_HEIGHT));
-      const fLow = Math.floor(floorFloat);
-      const fHigh = Math.min(3, fLow + 1);
-      const fMix = floorFloat - fLow;
-      const inBldg = p.z < 4.1;
-      const driftX = inBldg
-        ? this.floorGroups[fLow].position.x * (1 - fMix) + this.floorGroups[fHigh].position.x * fMix
-        : 0;
-      const driftZ = inBldg
-        ? this.floorGroups[fLow].position.z * (1 - fMix) + this.floorGroups[fHigh].position.z * fMix
-        : 0;
-
-      mesh.position.set(p.x + driftX, p.y + (inBldg ? 0.22 : 0.14), p.z + driftZ);
+      // El personaje comparte el desplazamiento del edificio; no añadirlo dos veces.
+      mesh.position.set(p.x, p.y + 0.025, p.z);
       mesh.rotation.y = p.facing;
 
       const ud = mesh.userData;
@@ -3065,7 +3080,7 @@ export class LPSBoxScene3D {
   teleportXrToPreset(preset) {
     const presets = {
       view_exterior: { x: 1, y: 0.08, z: 17, yaw: 0 },
-      view_auditorium: { x: -3.6, y: -3.4, z: 4.4, yaw: Math.PI },
+      view_auditorium: { x: -10.8, y: -3.4, z: 8.7, yaw: 0 },
       floor_0: { x: -7, y: 0.12, z: -3.3, yaw: 0 },
       floor_1: { x: 0, y: 3.52, z: -3.5, yaw: 0 },
       floor_2: { x: 0, y: 6.92, z: -3.5, yaw: 0 },
@@ -3684,18 +3699,31 @@ export class LPSBoxScene3D {
   _getSupportHeight(x, z, feetY) {
     const step = 0.54;
     let best = -Infinity;
-    // Ground is absent in the auditorium stair opening and below the plaza.
-    const opening = x >= -5.5 && x <= -1.7 && z >= -2 && z <= 3.4;
+    // Ground is absent in the stair opening inside the ground-floor library.
+    const opening = x >= -16.8 && x <= -13 && z >= 5.3 && z <= 10.7;
     if (!opening && feetY >= -0.4) best = 0;
-    const consider = h => { if (h <= feetY + step && h > best) best = h; };
+    // En rampas superpuestas, elegir el soporte más próximo a los pies evita
+    // saltar prematuramente al tramo del piso superior.
+    const consider = h => {
+      if (h > feetY + step) return;
+      if (!Number.isFinite(best) || Math.abs(h - feetY) < Math.abs(best - feetY) - 1e-6 ||
+          (Math.abs(Math.abs(h - feetY) - Math.abs(best - feetY)) < 1e-6 && h > best)) best = h;
+    };
     for (const slab of this.supportSlabs) {
       if (x >= slab.xMin && x <= slab.xMax && z >= slab.zMin && z <= slab.zMax) consider(slab.topY);
     }
+    let nearestRamp = null;
     for (const ramp of this.supportRamps) {
       if (x >= ramp.xMin && x <= ramp.xMax && z >= ramp.zMin && z <= ramp.zMax &&
           (ramp.minRefY === undefined || feetY >= ramp.minRefY) &&
-          (ramp.maxRefY === undefined || feetY <= ramp.maxRefY)) consider(ramp.yAt(x, z));
+          (ramp.maxRefY === undefined || feetY <= ramp.maxRefY)) {
+        const h = ramp.yAt(x, z);
+        if (h <= feetY + step && (nearestRamp === null || Math.abs(h - feetY) < Math.abs(nearestRamp - feetY))) nearestRamp = h;
+      }
     }
+    // Al iniciar una pendiente, no quedarse pegado a la losa plana inferior.
+    if (nearestRamp !== null && Math.abs(nearestRamp - feetY) <= 0.12) best = nearestRamp;
+    else if (nearestRamp !== null) consider(nearestRamp);
     return Number.isFinite(best) ? best : (feetY < -0.4 ? -3.4 : 0);
   }
 
@@ -3937,6 +3965,10 @@ export class LPSBoxScene3D {
     const ga = this.sim.groundAccel || this.sim.accel;
     const gAmp = ga.dynamicG;
     if (gAmp > 0.015) {
+      // El CyT está en buildingGroup; los grupos antiguos de piso ya no contienen la fachada.
+      // Desplazamiento visual limitado: no altera los datos ni las colisiones fijas.
+      this.buildingGroup.position.x = THREE.MathUtils.clamp(ga.x * 0.55, -0.3, 0.3);
+      this.buildingGroup.position.z = THREE.MathUtils.clamp(ga.y * 0.55, -0.3, 0.3);
       const baseShakeX = ga.x * 0.26;
       const baseShakeZ = ga.y * 0.22;
       for (let f = 0; f < 4; f++) {
@@ -3949,6 +3981,8 @@ export class LPSBoxScene3D {
       this.stairwellGroup.position.x = baseShakeX * 0.95;
       this.stairwellGroup.position.z = baseShakeZ * 0.95;
     } else {
+      this.buildingGroup.position.x *= 0.84;
+      this.buildingGroup.position.z *= 0.84;
       for (let f = 0; f < 4; f++) {
         this.floorGroups[f].position.x *= 0.84;
         this.floorGroups[f].position.z *= 0.84;

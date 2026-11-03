@@ -18,11 +18,14 @@ export const ZONES = [
     name: 'Sótano (-1) — Gran Auditorio Subterráneo (Entrada Principal)',
     shortName: 'Auditorio (-1)',
     color: '#f43f5e',
-    areas: [{ xMin: -9.4, xMax: 2.2, zMin: 1.0, zMax: 8.2, role: 'auditorium' }],
-    sensorPos: { x: -3.6, y: -1.1, z: 4.5 },
+    areas: [
+      { xMin: -17.7, xMax: -16.2, zMin: -7.2, zMax: 7.8, role: 'auditorium' },
+      { xMin: -11.9, xMax: -10.4, zMin: -7.2, zMax: 7.8, role: 'auditorium' }
+    ],
+    sensorPos: { x: -14, y: -1.1, z: 0 },
     coverSpots: [
-      { x: -7.2, z: 3.4 }, { x: -4.2, z: 5.2 },
-      { x: -1.0, z: 4.8 }, { x: 1.1, z: 3.2 }
+      { x: -19, z: -3.4 }, { x: -16, z: 2.2 },
+      { x: -12, z: 1.8 }, { x: -8, z: 3.2 }
     ]
   },
   {
@@ -34,7 +37,7 @@ export const ZONES = [
     shortName: 'Piso 1 · Acceso / TI',
     color: '#10b981',
     areas: [
-      { xMin: -21.2, xMax: -13.4, zMin: -9.8, zMax: 9.8, role: 'study' },
+      { xMin: -16.6, xMax: -15.0, zMin: -3.4, zMax: 3.4, role: 'library' },
       { xMin: -12.0, xMax: -4.2, zMin: -10.4, zMax: -4.2, role: 'it_room' },
       { xMin: -2.8, xMax: 12.5, zMin: -9.8, zMax: -4.0, role: 'portico' }
     ],
@@ -53,9 +56,10 @@ export const ZONES = [
     shortName: 'Piso 2 · Biblio / Sniffer',
     color: '#38bdf8',
     areas: [
-      { xMin: -21.2, xMax: -13.4, zMin: -9.8, zMax: 9.8, role: 'library' },
-      { xMin: -11.2, xMax: 2.8, zMin: -10.5, zMax: -4.8, role: 'classroom' },
-      { xMin: 3.8, xMax: 10.8, zMin: -10.5, zMax: -4.8, role: 'it_room' }
+      { xMin: -16.6, xMax: -15.0, zMin: -3.4, zMax: 3.4, role: 'library' },
+      { xMin: -9.8, xMax: -4.7, zMin: -6.2, zMax: -4.6, role: 'classroom' },
+      { xMin: -4.1, xMax: 3.0, zMin: -6.2, zMax: -4.6, role: 'classroom' },
+      { xMin: 3.8, xMax: 10.8, zMin: -6.2, zMax: -4.6, role: 'it_room' }
     ],
     sensorPos: { x: 7.2, y: 4.75, z: -10.45 },
     coverSpots: [
@@ -74,8 +78,9 @@ export const ZONES = [
     areas: [
       { xMin: -21.4, xMax: -19.5, zMin: -9.5, zMax: 9.5, role: 'library' },
       { xMin: -15.2, xMax: -13.3, zMin: -9.5, zMax: 9.5, role: 'library' },
-      { xMin: -11.2, xMax: 3.0, zMin: -10.5, zMax: -4.8, role: 'classroom' },
-      { xMin: 3.8, xMax: 10.8, zMin: -10.5, zMax: -4.8, role: 'it_room' }
+      { xMin: -9.8, xMax: -4.7, zMin: -6.2, zMax: -4.6, role: 'classroom' },
+      { xMin: -4.1, xMax: 3.0, zMin: -6.2, zMax: -4.6, role: 'classroom' },
+      { xMin: 3.8, xMax: 10.8, zMin: -6.2, zMax: -4.6, role: 'it_room' }
     ],
     sensorPos: { x: -4.0, y: 9.5, z: -6.5 },
     coverSpots: [
@@ -93,8 +98,9 @@ export const ZONES = [
     color: '#f59e0b',
     areas: [
       { xMin: -21.4, xMax: -19.5, zMin: -9.5, zMax: 9.5, role: 'library' },
-      { xMin: -11.2, xMax: 3.2, zMin: -10.5, zMax: -4.8, role: 'it_room' },
-      { xMin: 3.8, xMax: 10.8, zMin: -10.5, zMax: -4.8, role: 'classroom' }
+      { xMin: -9.8, xMax: -4.7, zMin: -6.2, zMax: -4.6, role: 'it_room' },
+      { xMin: -4.1, xMax: 3.0, zMin: -6.2, zMax: -4.6, role: 'it_room' },
+      { xMin: 3.8, xMax: 10.8, zMin: -6.2, zMax: -4.6, role: 'classroom' }
     ],
     sensorPos: { x: -2.0, y: 12.8, z: -7.2 },
     coverSpots: [
@@ -111,8 +117,9 @@ export const ZONES = [
     shortName: 'Piso 5 · Cafetería',
     color: '#ec4899',
     areas: [
-      { xMin: -1.6, xMax: 13.8, zMin: -10.2, zMax: -4.2, role: 'cafeteria' },
-      { xMin: -20.5, xMax: -4.5, zMin: -8.5, zMax: 8.2, role: 'terrace' }
+      { xMin: -7.0, xMax: 2.0, zMin: -10.4, zMax: -5.1, role: 'cafeteria' },
+      { xMin: -20.5, xMax: -13.5, zMin: -9.8, zMax: 1.8, role: 'terrace' },
+      { xMin: 4.0, xMax: 13.8, zMin: -10.3, zMax: -4.3, role: 'terrace' }
     ],
     sensorPos: { x: 5.5, y: 16.0, z: -6.8 },
     coverSpots: [
@@ -121,6 +128,73 @@ export const ZONES = [
     ]
   }
 ];
+
+// Rutas de evacuación aproximadas; alturas interpoladas junto con cada tramo.
+export function makeEvacuationRoute(p) {
+  const route = [];
+  const add = (x, y, z) => route.push({ x, y, z });
+  const level = Math.max(0, Math.min(4, Math.round((p.y - 0.12) / FLOOR_HEIGHT)));
+  if (p.y < -0.4) {
+    add(p.x, -3.4, 10.7);
+    add(-14.9, -3.4, 10.7);
+    add(-14.9, -3.4, 10.4);
+    add(-14.9, 0.12, 5.4);
+    add(-14.9, 0.12, 4.0);
+    add(-11.15, 0.12, 4.0);
+  } else if (level > 0 && p.x < -12.5 && level <= 3) {
+    // Seguir el borde de la biblioteca hasta el descanso, evitando el vacío central.
+    const endZ = level % 2 ? -9.6 : 10;
+    add(p.x, p.y, endZ);
+    add(level % 2 ? -11.8 : -10.55, p.y, endZ);
+    for (let f = level - 1; f >= 0; f--) {
+      const yTop = 0.12 + (f + 1) * FLOOR_HEIGHT;
+      const topZ = f % 2 === 0 ? -8.2 : 8.8;
+      const bottomZ = f % 2 === 0 ? 8.8 : -8.2;
+      const laneX = f % 2 === 0 ? -11.8 : -10.55;
+      if (f !== level - 1) add(laneX, yTop, f % 2 === 0 ? -9.5 : 10.0);
+      add(laneX, yTop, topZ);
+      add(laneX, 0.12 + f * FLOOR_HEIGHT, bottomZ);
+      if (f > 0) add(laneX, 0.12 + f * FLOOR_HEIGHT, f % 2 === 0 ? 10.0 : -9.5);
+    }
+  } else if (level > 0) {
+    // Salir por el vano del salón y seguir el corredor hasta la escalera oriental.
+    if (p.x < -12.5) {
+      add(p.x, p.y, -10.2);
+      add(-11.5, p.y, -10.2);
+      add(-11.5, p.y, -3.45);
+    } else if (level === 4 && p.role === 'cafeteria') {
+      add(-2.5, p.y, p.z);
+      add(-2.5, p.y, -3.4);
+    } else if (p.z < -4.55 && level <= 3) {
+      const left = p.x < -4.4 ? -10.0 : p.x < 3.4 ? -4.4 : p.x < 11.2 ? 3.4 : 11.2;
+      const right = left === -10.0 ? -4.4 : left === -4.4 ? 3.4 : left === 3.4 ? 11.2 : 14.6;
+      const door = Math.min(left + 2.1, (left + right) * 0.5);
+      add(door, p.y, p.z);
+      add(door, p.y, -3.4);
+    }
+    add(16.65, p.y, -3.3);
+    for (let f = level - 1; f >= 0; f--) {
+      const bottom = 0.12 + f * FLOOR_HEIGHT;
+      add(16.65, bottom + FLOOR_HEIGHT, -3.8);
+      add(16.65, bottom + FLOOR_HEIGHT * 0.5, -9.1);
+      add(15.45, bottom + FLOOR_HEIGHT * 0.5, -10.0);
+      add(15.45, bottom + FLOOR_HEIGHT * 0.5, -9.1);
+      add(15.45, bottom, -3.8);
+      add(16.65, bottom, -3.3);
+    }
+  } else if (p.x < -12.5) {
+    add(p.x, 0.12, 4.0);
+    add(-11.15, 0.12, 4.0);
+  } else if (p.z < -4.55 && p.x < -4.8) {
+    add(-8.4, 0.12, p.z);
+    add(-8.4, 0.12, -3.4);
+  }
+  add(p.x > 6 ? 12.5 : -8, 0.12, 5.0);
+  const angle = (p.id * 1.37) % (Math.PI * 2);
+  const radius = 0.8 + (p.id % 5) * 0.68;
+  add(ASSEMBLY_POINT.x + Math.cos(angle) * radius, 0.12, ASSEMBLY_POINT.z + Math.sin(angle) * radius);
+  return route;
+}
 
 export const ZONE_KEYS = ZONES.map((z) => z.id);
 
@@ -181,9 +255,9 @@ export const RUBBLE_POCKETS = [
   {
     id: 'rubble_sub_aud',
     zone: 'S',
-    x: -3.2,
+    x: -14.9,
     y: -3.4,
-    z: 2.4,
+    z: 8.9,
     label: 'Acceso Auditorio Subterráneo (-1)',
     phrase: '¡Cayó concreto en la escalera del auditorio subterráneo, tenemos aire pero no podemos salir!'
   }
@@ -206,11 +280,15 @@ const DIALOGUES_BY_ROLE = {
     ['La acústica de madera de este auditorio subterráneo aísla todo el ruido de afuera.', 'Total, ni se siente cuando pasa gente por la plazoleta.']
   ],
   library: [
+    ['¿Me guardas el puesto un momentico? Voy por el libro.', 'De una, pero vuelve rápido que esto se está llenando.'],
+    ['¿Ya miraste si el SINAB tiene el texto en línea?', 'Sí, parce, ahí está; te paso el enlace después.'],
     ['¿Conseguiste el libro de ecuaciones diferenciales en la colección general?', 'Estaba prestado, pero descargué el artículo desde las bases del SINAB.'],
     ['Me encanta estudiar junto al vacío central de la biblioteca, entra mucha luz.', 'Sí, aunque toca hablar bajito porque hoy están preparando tesis en todas las mesas.'],
     ['¿Probaste la simulación numérica en los computadores del costado occidental?', 'Ya corrió, convergió en cuarenta iteraciones sin desbordar memoria.']
   ],
   classroom: [
+    ['¿Qué más, parce? ¿Sí entendiste el último ejercicio?', 'Más o menos, repasémoslo antes del parcial.'],
+    ['Uy, qué jornada tan larga. ¿Vamos por un tinto?', 'De una, pero primero terminemos el trabajo.'],
     ['El parcial de Algoritmos estuvo exigente con la parte de programación dinámica.', 'Menos mal repasamos complejidad asintótica antes de subir al salón.'],
     ['¿A qué hora nos toca laboratorio después de esta clase?', 'A las cuatro, apenas salgamos subimos al quinto por un tinto rápido.'],
     ['Mira cómo planteó el tensor de esfuerzos en el tablero.', 'Tómale foto antes de que borre esa demostración.']
@@ -221,6 +299,8 @@ const DIALOGUES_BY_ROLE = {
     ['El aire acondicionado del cuarto de servidores siempre está helado.', 'Mejor así, ayer los switches de distribución estaban a tope de tráfico.']
   ],
   cafeteria: [
+    ['¿Qué hay de almuerzo hoy?', 'Hay corrientazo y también una opción vegetariana.'],
+    ['¿Trajiste saco? Afuera está haciendo un frío bravo.', 'Sí, y por si acaso también traje sombrilla.'],
     ['Qué buena vista del campus se tiene desde la cafetería del último piso.', 'Es el mejor parche del CyT, sobre todo acá bajo la pérgola cubierta.'],
     ['¿Pedimos dos cafés y unas empanadas mientras compilamos el informe?', 'De una, que todavía nos quedan dos horas de proyecto integrador.'],
     ['Menos mal esta parte de la terraza tiene techo, parecía que iba a llover hacia los cerros.', 'Típico clima de Bogotá: sol en la plazoleta y nubes en Monserrate.']
@@ -230,6 +310,7 @@ const DIALOGUES_BY_ROLE = {
     ['¿Repasamos las diapositivas de la sustentación aquí afuera?', 'Dale, tú empiezas con el marco teórico y yo explico los resultados experimentales.']
   ],
   study: [
+    ['¿Nos repartimos los ejercicios?', 'Listo, yo hago los dos primeros y luego comparamos.'],
     ['Revisemos los planos del circuito antes de subir por la rampa al segundo piso.', 'Listo, ya verifiqué las tierras y el regulador de voltaje.'],
     ['¿Nos vemos en las mesas de primer piso o subimos a biblioteca?', 'Terminemos el resumen acá abajo y ahorita subimos por la rampa exterior.']
   ],
@@ -288,6 +369,11 @@ const SKIN_TONES = ['#f5d0b5', '#eab68c', '#d69464', '#b87648', '#8d5531', '#f9d
 
 function randRange(min, max) {
   return min + Math.random() * (max - min);
+}
+
+function pointInArea(min, max) {
+  const margin = Math.min(0.8, Math.max(0, (max - min) * 0.48));
+  return randRange(min + margin, max - margin);
 }
 
 function makeHexByte() {
@@ -498,8 +584,8 @@ export class LPSBoxSimulation {
         const dialogues = DIALOGUES_BY_ROLE[role] || DIALOGUES_BY_ROLE.study;
         const pairSet = dialogues[Math.floor(i / 2) % dialogues.length];
 
-        let x = randRange(area.xMin + 0.8, area.xMax - 0.8);
-        let z = randRange(area.zMin + 0.8, area.zMax - 0.8);
+        let x = pointInArea(area.xMin, area.xMax);
+        let z = pointInArea(area.zMin, area.zMax);
         let facing = randRange(-Math.PI, Math.PI);
         let gesture = role === 'it_room' ? 'typing' : role === 'library' ? 'reading' : role === 'cafeteria' ? 'coffee' : 'notes';
         let partnerId = null;
@@ -511,8 +597,15 @@ export class LPSBoxSimulation {
           facing = 0.45;
           lineA = pairSet[0];
         } else if (pendingPartner) {
-          x = Math.min(area.xMax - 0.5, pendingPartner.x + 0.95);
-          z = Math.min(area.zMax - 0.5, pendingPartner.z + 0.42);
+          if (area.xMax - area.xMin < 2.2) {
+            // En pasillos estrechos conversar a lo largo del pasillo, no dentro de las sillas.
+            x = pendingPartner.x;
+            z = pendingPartner.z + (pendingPartner.z + 0.9 < area.zMax - 0.4 ? 0.9 : -0.9);
+            z = Math.max(area.zMin + 0.2, Math.min(area.zMax - 0.2, z));
+          } else {
+            x = Math.min(area.xMax - 0.5, pendingPartner.x + 0.95);
+            z = Math.min(area.zMax - 0.5, pendingPartner.z + 0.42);
+          }
           facing = Math.atan2(pendingPartner.x - x, pendingPartner.z - z);
           pendingPartner.facing = Math.atan2(x - pendingPartner.x, z - pendingPartner.z);
           gesture = 'talk_pair';
@@ -689,9 +782,10 @@ export class LPSBoxSimulation {
     this.people.forEach((p, idx) => {
       const zone = ZONES.find((z) => z.id === p.homeZone) || ZONES[1];
       const area = p.areaBounds || zone.areas[0];
-      p.x = randRange(area.xMin + 0.8, area.xMax - 0.8);
+      p.x = pointInArea(area.xMin, area.xMax);
       p.y = zone.yBase;
-      p.z = randRange(area.zMin + 0.8, area.zMax - 0.8);
+      p.z = pointInArea(area.zMin, area.zMax);
+      p.evacuationRoute = null;
       p.targetX = p.x;
       p.targetZ = p.z;
       p.floor = zone.floor;
@@ -1470,9 +1564,8 @@ export class LPSBoxSimulation {
             } else if (p.id % 2 === 0) {
               p.state = 'crouching';
               p.pose = 'crouch';
-              const cover = homeZone.coverSpots[p.id % homeZone.coverSpots.length];
-              p.targetX = cover.x;
-              p.targetZ = cover.z;
+              p.targetX = p.x;
+              p.targetZ = p.z;
               p.phrase = MILD_PHRASES[p.id % MILD_PHRASES.length];
               p.speechUrgency = 'mild';
             } else {
@@ -1486,9 +1579,8 @@ export class LPSBoxSimulation {
           if (p.state === 'working' || p.state === 'mild_react' || p.state === 'crouching') {
             p.state = 'duck_cover';
             p.pose = 'cover_head';
-            const cover = homeZone.coverSpots[p.id % homeZone.coverSpots.length];
-            p.targetX = cover.x;
-            p.targetZ = cover.z;
+            p.targetX = p.x;
+            p.targetZ = p.z;
             const pool = this.scenario === 'catastrophic' ? CATASTROPHIC_COVER_PHRASES : MAJOR_COVER_PHRASES;
             p.phrase = pool[p.id % pool.length];
             p.speechUrgency = this.scenario === 'catastrophic' ? 'catastrophic' : 'major';
@@ -1520,8 +1612,8 @@ export class LPSBoxSimulation {
           p.waitTimer -= dt;
           if (p.waitTimer <= 0) {
             const area = p.areaBounds || homeZone.areas[0];
-            p.targetX = randRange(area.xMin + 0.8, area.xMax - 0.8);
-            p.targetZ = randRange(area.zMin + 0.8, area.zMax - 0.8);
+            p.targetX = pointInArea(area.xMin, area.xMax);
+            p.targetZ = pointInArea(area.zMin, area.zMax);
             p.waitTimer = randRange(3.5, 8.0);
           }
         }
@@ -1539,62 +1631,31 @@ export class LPSBoxSimulation {
         speed = isPanic ? 3.5 : 1.9;
         p.pose = isPanic ? 'run' : 'stand';
 
-        if (p.y < -0.1) {
-          // Sótano Auditorio (-3.40 m) -> subir por escalera ancha junto a entrada principal (x = -3.6, z: 3.2 -> -1.5)
-          if (Math.hypot(p.x - (-3.6), p.z - 3.0) > 1.3 && p.y < -3.0) {
-            p.targetX = -3.6 + ((p.id % 3) - 1) * 0.35;
-            p.targetZ = 3.0;
-          } else {
-            p.y = Math.min(0.12, p.y + (isPanic ? 2.1 : 1.3) * dt);
-            const prog = (p.y - (-3.4)) / 3.52;
-            p.targetX = -3.6 + ((p.id % 3) - 1) * 0.35;
-            p.targetZ = 3.0 - prog * 3.8;
+        if (!p.evacuationRoute) p.evacuationRoute = makeEvacuationRoute(p);
+        const waypoint = p.evacuationRoute[0];
+        if (waypoint) {
+          const dx = waypoint.x - p.x, dy = waypoint.y - p.y, dz = waypoint.z - p.z;
+          const distance = Math.hypot(dx, dy, dz);
+          const travel = Math.min(distance, speed * dt);
+          if (distance > 0.0001) {
+            p.x += dx / distance * travel;
+            p.y += dy / distance * travel;
+            p.z += dz / distance * travel;
+            p.vx = dx / distance * speed;
+            p.vz = dz / distance * speed;
+            if (Math.hypot(dx, dz) > 0.001) p.facing = Math.atan2(dx, dz);
+            p.walkPhase += dt * speed * 4.6;
           }
-        } else if (p.y > 0.28) {
-          // Pisos superiores (P2..P5): Ala Oeste baja por Rampas Exteriores (x = -11.1), Ala Norte por Escalera Oriental (x = 15.8)
-          const useWestRamp = p.x < -3.5 && p.y <= 10.6;
-          if (useWestRamp) {
-            if (p.x < -11.8) {
-              p.targetX = -11.1;
-              p.targetZ = p.z;
-            } else {
-              p.y = Math.max(0.12, p.y - (isPanic ? 2.2 : 1.35) * dt);
-              const levelFloat = (p.y - 0.12) / FLOOR_HEIGHT;
-              const seg = Math.floor(levelFloat);
-              const frac = levelFloat - seg;
-              p.targetX = -11.1 + ((p.id % 2) - 0.5) * 0.45;
-              p.targetZ = seg % 2 === 0 ? 8.5 - frac * 16.5 : -8.0 + frac * 16.5;
-            }
-          } else {
-            // Ir por el corredor exterior del Ala Norte hacia la Escalera Oriental (x = 15.8, z = -3.5)
-            if (p.x < 14.8) {
-              p.targetX = 15.6;
-              p.targetZ = -3.5 + ((p.id % 3) - 1) * 0.25;
-            } else {
-              p.y = Math.max(0.12, p.y - (isPanic ? 2.45 : 1.45) * dt);
-              const frac = ((p.y - 0.12) % FLOOR_HEIGHT) / FLOOR_HEIGHT;
-              p.targetX = 15.8 + (frac > 0.5 ? 0.55 : -0.45);
-              p.targetZ = -9.5 + Math.abs(frac - 0.5) * 11.0;
-            }
+          if (distance <= speed * dt + 0.001) {
+            p.x = waypoint.x; p.y = waypoint.y; p.z = waypoint.z;
+            p.evacuationRoute.shift();
           }
+          p.targetX = p.x; p.targetZ = p.z;
         } else {
-          // Nivel Plazoleta (y = 0.12 m) -> dirigirse al Punto de Encuentro en la Plazoleta CyT
-          p.y = 0.12;
-          if (p.z < 2.0) {
-            p.targetX = p.x > 6 ? 12.5 : -2.5;
-            p.targetZ = 4.5;
-          } else {
-            const angle = (p.id * 1.37) % (Math.PI * 2);
-            const rad = 0.8 + (p.id % 5) * 0.68;
-            p.targetX = ASSEMBLY_POINT.x + Math.cos(angle) * rad;
-            p.targetZ = ASSEMBLY_POINT.z + Math.sin(angle) * rad;
-            if (Math.hypot(p.x - p.targetX, p.z - p.targetZ) < 0.6) {
-              p.state = 'evacuated';
-              p.pose = 'stand';
-              p.phrase = EVACUATED_PLAZA_PHRASES[p.id % EVACUATED_PLAZA_PHRASES.length];
-              p.speechUrgency = 'safe';
-            }
-          }
+          p.state = 'evacuated';
+          p.pose = 'stand';
+          p.phrase = EVACUATED_PLAZA_PHRASES[p.id % EVACUATED_PLAZA_PHRASES.length];
+          p.speechUrgency = 'safe';
         }
       } else if (p.state === 'trapped') {
         speed = 0;
@@ -1615,7 +1676,7 @@ export class LPSBoxSimulation {
         p.z += (dz / dist) * step;
         p.facing = Math.atan2(p.vx, p.vz);
         p.walkPhase += dt * speed * 4.6;
-      } else {
+      } else if (!p.evacuationRoute || p.state === 'evacuated') {
         p.vx = 0;
         p.vz = 0;
         if (p.state === 'evacuated') {
